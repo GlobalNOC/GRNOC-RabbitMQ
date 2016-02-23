@@ -1,4 +1,13 @@
-#!/usr/bin/perl
+#--------------------------------------------------------------------
+#----- GRNOC RabbitMQ Client Library
+#-----
+#----- Copyright(C) 2015 The Trustees of Indiana University
+#--------------------------------------------------------------------
+#----- 
+#----- This module wraps much of the common Rabbit related to code
+#----- especially for RPC calls to Rabbit RPC servers and makes it
+#----- reasonably easy to develop with.
+#--------------------------------------------------------------------
 
 use strict;
 use warnings;
@@ -8,7 +17,7 @@ package GRNOC::RabbitMQ::Client;
 use AnyEvent::RabbitMQ;
 use AnyEvent;
 use Data::UUID;
-use Log::Log4perl;
+use GRNOC::Log;
 use JSON::XS;
 
 sub new{
@@ -21,7 +30,7 @@ sub new{
 		 vhost => '/',
 		 timeout => 1,
 		 queue => undef,
-		 exchange => 'OESS',
+		 exchange => '',
 		 @_ );
 
     my $self = \%args;

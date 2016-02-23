@@ -4,22 +4,20 @@ use ExtUtils::MakeMaker;
 
 sub MY::postamble { << 'END';}
 rpm:    dist
-	rpmbuild -ta perl-OESS-$(VERSION).tar.gz
+	rpmbuild -ta perl-GRNOC-RabbitMQ-$(VERSION).tar.gz
 END
 
 WriteMakefile(
-    NAME                => 'perl-OESS',
+    NAME                => 'perl-GRNOC-RabbitMQ',
     AUTHOR              => 'GRNOC Systems Engineering <syseng@grnoc.iu.edu>',
-    VERSION_FROM        => 'lib/OESS/Database.pm',
+    VERSION_FROM        => 'lib/GRNOC/RabbitMQ.pm',
     PL_FILES            => {},
     PREREQ_PM => {
-	'DBI'=> 0,
-	'XML::Simple'=> 0,
-	'Array::Utils' => 0,
-	'Net::DBus' => 0
+	'AnyEvent::RabbitMQ' => 0,
+	'GRNOC::Log' => 0,
     },
     dist                => { COMPRESS => 'gzip -9f', SUFFIX => 'gz', },
-    clean               => { FILES => 'perl-OESS-*' },
+    clean               => { FILES => 'perl-GRNOC-RabbitMQ-*' },
     );
 
 sub MY::test
