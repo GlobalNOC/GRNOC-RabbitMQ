@@ -10,14 +10,18 @@ BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 BuildArch:noarch
 
 BuildRequires: perl
-Requires: perl-GRNOC-Log, perl-AnyEvent, perl-AnyEvent-RabbitMQ
+Requires: perl-GRNOC-Log
+Requires: perl-AnyEvent
+Requires: perl-AnyEvent-RabbitMQ
+Requires: perl-JSON-XS
+Requires: perl-JSON-Schema
 
 %description
 The GRNOC::RabbitMQ collection is a set of perl modules which are used to
 provide and interact with GRNOC RabbitMQ services.
 
 %prep
-%setup -q -n GRNOC-RabbitMQ-%{version}
+%setup -q -n perl-GRNOC-RabbitMQ-%{version}
 
 %build
 %{__perl} Makefile.PL PREFIX="%{buildroot}%{_prefix}" INSTALLDIRS="vendor"
@@ -49,5 +53,5 @@ rm -rf $RPM_BUILD_ROOT
 %doc %{_mandir}/man3/GRNOC::RabbitMQ::Method.3pm.gz
 %doc %{_mandir}/man3/GRNOC::RabbitMQ::Client.3pm.gz
 
-* Thu Dec  5 2013 AJ Ragusa <aragusa@grnoc.iu.edu> - OESS Perl Libs
-- Initial build.
+%changelog
+
