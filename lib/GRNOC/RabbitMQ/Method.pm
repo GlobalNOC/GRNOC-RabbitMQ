@@ -19,6 +19,53 @@ use GRNOC::Log;
 use JSON::XS;
 use JSON::Schema;
 
+=head1 NAME
+
+GRNOC::RabbitMQ::Method - a GRNOC centric RabbitMQ method Object
+
+used to embody a registered method with its input, documentaiton,
+and any other pertinent information
+
+=head1 SYNOPSIS
+
+This module provides AMQP programmers a methd to represent a
+AMQP service which is then registered with GRNOC::RabbitMQ::Dispatcher
+ 
+here is an example
+
+
+use GRNOC::RabbitMQ::Dispatcher;
+use GRNOC::RabbitMQ::Method;
+
+sub main{
+
+    my $dispatcher = GRNOC::RabbitMQ::Dispatcher->new(queue => "OF.FWDCTL",
+                                                      exchange => 'OESS',
+                                                      user => 'guest',
+                                                      pass => 'guest');
+
+    my $method = GRNOC::RabbitMQ::Method->new( name => "do_stuff",
+                                               callback => \&do_stuff,
+                                               description => "Does stuff" );
+    $method->set_schema_validator( schema => {});
+
+    $dispatcher->register_method( $method );
+
+    $dispatcher->start_consuming();
+}
+
+sub do_stuff{
+    my $json = shift;
+
+    warn "\o/ it just works\n";
+
+    return {success => 1};
+}
+
+main();
+
+=cut
+
 sub new{
     my $that = shift;
     my $class = ref($that) || $that;

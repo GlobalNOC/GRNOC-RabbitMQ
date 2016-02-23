@@ -18,6 +18,50 @@ use AnyEvent::RabbitMQ;
 use AnyEvent;
 use GRNOC::Log;
 
+=head1 NAME
+
+GRNOC::RabbitMQ::Dispatcher - GRNOC centric RabbitMQ RPC Dispatcher
+
+=head1 SYNOPSIS
+
+This modules provides AMQP programmers with an abstracted JSON/AMQP base 
+object.  The object handles the taks of input/param validation.
+
+It takes care of handling the response back to the caller over Rabbit.
+
+Here is an example of how to use this
+
+use GRNOC::RabbitMQ::Dispatcher;
+use GRNOC::RabbitMQ::Method;
+
+sub main{
+
+    my $dispatcher = GRNOC::RabbitMQ::Dispatcher->new(queue => "OF.FWDCTL",
+                                                      exchange => 'OESS',
+                                                      user => 'guest',
+                                                      pass => 'guest');
+
+    my $method = GRNOC::RabbitMQ::Method->new( name => "do_stuff",
+                                               callback => \&do_stuff,
+                                               description => "Does stuff" );
+    $method->set_schema_validator( schema => {});
+
+    $dispatcher->register_method( $method );
+
+    $dispatcher->start_consuming();
+}
+
+sub do_stuff{
+    my $json = shift;
+
+    warn "\o/ it just works\n";
+
+    return {success => 1};
+}
+
+main();
+
+=cut
 
 sub new{
     my $that  = shift;
