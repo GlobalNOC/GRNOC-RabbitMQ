@@ -1,4 +1,13 @@
-#!/usr/bin/perl
+#--------------------------------------------------------------------
+#----- GRNOC RabbitMQ Client Library
+#-----
+#----- Copyright(C) 2015 The Trustees of Indiana University
+#--------------------------------------------------------------------
+#----- 
+#----- This module wraps much of the common Rabbit related to code
+#----- especially for RPC calls to Rabbit RPC servers and makes it
+#----- reasonably easy to develop with.
+#--------------------------------------------------------------------
 
 use strict;
 use warnings;
@@ -8,8 +17,48 @@ package GRNOC::RabbitMQ::Client;
 use AnyEvent::RabbitMQ;
 use AnyEvent;
 use Data::UUID;
-use Log::Log4perl;
+use GRNOC::Log;
 use JSON::XS;
+
+=head1 NAME
+
+GRNOC::RabbitMQ::Client - GRNOC RabbitMQ RPC Client handler
+
+=head1 SYNOPSIS
+
+This module provides Rabbit MQ programers and abstraction about the JSON/AMQP 
+base service objects.  This module implements a blocking RPC or "fire and forget"
+AMQP client.
+
+Please note that currently much work is still to be done on this module, 
+specifically with handling errors.
+
+Results from RPC calls will always be perl Objects.
+
+Here is a quick example on how to use this module
+
+use strict;
+use warnings;
+
+use GRNOC::RabbitMQ::Client;
+use Data::Dumper;
+
+sub main{
+
+    my $client = GRNOC::RabbitMQ::Client->new(queue => "OF.FWDCTL",
+                                              exchange => 'OESS',
+                                              user => 'guest',
+                                              pass => 'guest');
+
+    my $res = $client->do_stuff();
+    warn Data::Dumper::Dumper($res);
+
+}
+
+main();
+
+=cut
+
 
 sub new{
     my $class = shift;
@@ -21,7 +70,7 @@ sub new{
 		 vhost => '/',
 		 timeout => 1,
 		 queue => undef,
-		 exchange => 'OESS',
+		 exchange => '',
 		 @_ );
 
     my $self = \%args;
@@ -145,7 +194,7 @@ sub AUTOLOAD{
         return  sub {
             my $var = shift;
             my $body = $var->{body}->{payload};
-            if ($a{correlation_id} eq $var->{header}->{correlation_id}) {
+	    if ($a{correlation_id} eq $var->{header}->{correlation_id}) {
                 $a{condvar}->send($body);
             }
         };
