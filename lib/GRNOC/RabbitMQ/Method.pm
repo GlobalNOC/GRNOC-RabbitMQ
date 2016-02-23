@@ -24,24 +24,22 @@ sub new{
     my $class = ref($that) || $that;
     
     my %valid_parameter_list = (
-	'expires' => 1,
 	'name' => 1,
 	'callback' => 1,
 	'is_default' => 1,
 	'debug' => 1,
+	'description' => 1,
 	'output_formatter' => 1,
+	'logger' => 1,
 	);
     
     #--- overide the defaults
     my %args = (
-	expires          => "-1d",
 	output_formatter => sub { JSON::XS->new()->encode( shift ) },
 	name             => undef,
 	callback         => undef,
 	description      => undef,
-	attachment       => undef,
 	debug            => 0,
-	streaming        => 0,
 	@_,
 	);
 
@@ -51,9 +49,9 @@ sub new{
 
     bless $self,$class;
 
-  # validate the parameter list
-
-  # only valid parameters
+    # validate the parameter list
+    
+    # only valid parameters
     foreach my $passed_param (keys %$self) {
 	if (!(exists $valid_parameter_list{$passed_param})) {
 	    $self->{'logger'}->confess("invalid parameter [$passed_param]");

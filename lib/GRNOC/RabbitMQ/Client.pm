@@ -154,7 +154,8 @@ sub AUTOLOAD{
         return  sub {
             my $var = shift;
             my $body = $var->{body}->{payload};
-            if ($a{correlation_id} eq $var->{header}->{correlation_id}) {
+            warn Data::Dumper::Dumper($var);
+	    if ($a{correlation_id} eq $var->{header}->{correlation_id}) {
                 $a{condvar}->send($body);
             }
         };
