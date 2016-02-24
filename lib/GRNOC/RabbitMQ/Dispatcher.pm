@@ -123,7 +123,6 @@ sub _connect_to_rabbit{
     my $cv = AnyEvent->condvar;
     my $rabbit_mq;
 
-    $self->{'logger'}->error("Attempting to connect with: " . Data::Dumper::Dumper($self));
     my $ar = AnyEvent::RabbitMQ->new->load_xml_spec()->connect(
 	host => $self->{'host'},
 	port => $self->{'port'},
