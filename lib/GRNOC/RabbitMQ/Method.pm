@@ -120,6 +120,9 @@ sub new{
 	return;
     }
     
+    $self->set_schema_validator( schema => { });
+
+    
     return $self;
 }
 
@@ -142,10 +145,12 @@ sub set_schema_validator{
 
     my $validator = JSON::Schema->new($params{'schema'});
     if(!defined($validator)){
-	
+	$self->set_error("Unable to create a validator based on schema: " . $params{'schema'});
+	return;
     }
 
     $self->{'validator'} = $validator;
+    return 1;
 }
 
 sub _build_schema{
@@ -185,6 +190,11 @@ sub _validate_schema{
     
     if(!defined($json)){
 	$self->set_error("Is not valid JSON: " . $body);
+	return;
+    }
+
+    if(!defined($self->{'validator'})){
+	$self->set_error("No validator found!");
 	return;
     }
 
@@ -469,7 +479,9 @@ sub _parse_input_parameters{
 	my $input = $inputs->{$param};
 
 	if($schema){
-	    return $input;
+	    $self->{'input_params'}{$param}{'is_set'} = 1;
+	    $self->{'input_params'}{$param}{'value'} = $input;
+	    next;
 	}
 
 	my @input_array;
