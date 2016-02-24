@@ -47,6 +47,7 @@ sub main{
     my $method = GRNOC::RabbitMQ::Method->new( name => "do_stuff",
                                                callback => \&do_stuff,
                                                description => "Does stuff" );
+
     $method->set_schema_validator( schema => {});
 
     $dispatcher->register_method( $method );
@@ -147,6 +148,32 @@ sub set_schema_validator{
     $self->{'validator'} = $validator;
 }
 
+sub _build_schema{
+    my $self = shift;
+    
+    my @required;
+    my $schema = {};
+
+    foreach my $param (sort keys(%{$self->{'input_params'}})) {
+	my $pattern                         = $self->{'input_params'}{$param}{'pattern'};
+	my $required                        = $self->{'input_params'}{$param}{'required'};
+	my $schema_validator                = $self->{'input_params'}{$param}{'schema'};
+
+	if($required){
+	    push(@required, $param);
+	}
+
+	if(defined($schema_validator) && !defined($pattern)){
+	    $schema->{$param} = $schema_validator
+	}else{
+	    $schema->{$param} = {'type' => 'any'}
+	}
+    }
+    
+    $schema->{'required'} = \@required;
+    return $schema;
+}
+
 sub _validate_schema{
     my $self = shift;
     my $body = shift;
@@ -176,6 +203,142 @@ sub _validate_schema{
 	return;
     }
 }
+
+sub add_input_parameter{
+    my $self = shift;
+    my %params = @_;
+
+    my %args = (
+	pattern   => '^(\d+)$',
+	required  => 1,
+	multiple  => 0,
+	ignore_default_input_validators => 0,
+	input_validators => [],
+	min_length => undef,
+	max_length => undef,
+	validation_error_text => undef,
+	schema => undef,
+	@_,
+	);
+
+    if (!exists $args{'allow_null'}) {
+	if ($args{'required'}) {
+	    $args{'allow_null'} = 0;
+	}
+	else {
+	    $args{'allow_null'} = 1;
+	}
+    }
+    
+    if (!defined $args{'name'}) {
+	$self->{'logger'}->confess("name is a required parameter");
+	return;
+    }
+
+    if (!defined $args{'description'}) {
+	$self->{'logger'}->confess("description is a required parameter");
+	return;
+    }
+
+    if (!defined $args{'validation_error_text'}){
+	my $error_text;
+	my $pattern = $args{'pattern'};
+	my $name    = $args{'name'};
+
+	if ($pattern eq $GRNOC::WebService::Regex::NUMBER_ID){
+	    $error_text = "Parameter $name only accepts positive integers and 0.";
+	}
+	elsif ($pattern eq $GRNOC::WebService::Regex::BOOLEAN) {
+	    $error_text = "Parameter $name only accepts either 0 or 1 for false or true values, respectively.";
+	}
+	elsif ($pattern eq $GRNOC::WebService::Regex::FLOAT){
+	    $error_text = "Parameter $name only accepts floating point numbers.";
+	}
+	elsif ($pattern eq $GRNOC::WebService::Regex::INTEGER){
+	    $error_text = "Parameter $name only accepts integer numbers.";
+	}
+	elsif ($pattern eq $GRNOC::WebService::Regex::ANY_NUMBER){
+	    $error_text = "Parameter $name only accepts numbers.";
+	}
+	elsif ($pattern eq $GRNOC::WebService::Regex::NAME_ID){
+	    $error_text = "Parameter $name only accepts printable characters. This excludes control characters like newlines, carrier return, and others.";
+	}
+	elsif ($pattern eq $GRNOC::WebService::Regex::TEXT){
+	    $error_text = "Parameter $name only accepts printable characters and spaces, including newlines. This excludes control characters.";
+	}
+	elsif ($pattern eq $GRNOC::WebService::Regex::IP_ADDRESS){
+	    $error_text = "Parameter $name only accepts valid IPv4 or IPv6 addresses, including valid shortened notation.";
+	}
+	elsif ($pattern eq $GRNOC::WebService::Regex::MAC_ADDRESS){
+	    $error_text = "Parameter $name only accepts valid MAC addresses using either a : or a - as delimiter.";
+	}
+	elsif ($pattern eq $GRNOC::WebService::Regex::HOSTNAME){
+	    $error_text = "Parameter $name only accepts valid RFC1123 host/domain names.";
+	}
+	else {
+	    $error_text = "CGI input parameter $name does not match pattern /$pattern/ ";
+	}
+
+	$args{'validation_error_text'} = $error_text;
+    }
+
+    $self->{'input_params'}{$args{'name'}} = \%args;
+
+    my $new_schema = $self->_build_schema();
+    $self->set_schema_validator( schema => $new_schema );
+
+    return 1;
+}
+
+
+=head2 remove_input_parameter()
+removes a input parameter from this method.
+=cut
+
+sub remove_input_parameter{
+    my $self  = shift;
+    my $param = shift;
+
+    if (defined $self->{'input_params'}{$param}) {
+	delete $self->{'input_params'}{$param};
+	
+	my $new_schema = $self->_build_schema();
+	$self->set_schema_validator( schema => $new_schema );
+	
+	return 1;
+    }
+
+    return;
+}
+
+=head2 add_input_validator()
+This method takes a name, description, subroutine callback, and the name of an input parameter as arguments.  This
+subroutine should return either a true or false value which states whether or not the supplied input to a particular
+parameter is sane (true) or tainted (false).  An error will be returned unless every input supplied to the parameter
+returns a true value when executed with every input validator supplied.  All default input validators defined in the
+dispatcher must also return a true value, unless they are overridden with the ignore_default_input_validators => 1
+argument in the add_input_parameter() method.
+=cut
+
+sub add_input_validator {
+
+    my ( $self, %args ) = @_;
+
+    my $name = $args{'name'};
+    my $description = $args{'description'};
+    my $callback = $args{'callback'};
+    my $input_parameter = $args{'input_parameter'};
+
+    my $input_validators = $self->{'input_params'}{$input_parameter}{'input_validators'};
+
+    my $validator = {'name' => $name,
+                   'description' => $description,
+		     'callback' => $callback};
+
+    push( @$input_validators, $validator );
+}
+
+
 
 sub help{
     
@@ -239,10 +402,16 @@ sub _return_results{
     my $reply_to = shift;
     my $results = shift;
 
+    $results = {results => $results};
+
+    my $json = encode_json($results);
+
     $rabbit_mq_channel->publish( exchange => $reply_to->{'exchange'},
 				 routing_key => $reply_to->{'routing_key'},
 				 header => {'correlation_id' => $reply_to->{'correlation_id'}},
-				 body => JSON::XS::encode_json($results));
+				 body => $json);
+    $rabbit_mq_channel->ack();
+
 }
 
 =head2 _return_error()
@@ -268,9 +437,183 @@ sub _return_error{
 				 routing_key => $reply_to->{'routing_key'},
 				 header => {'correlation_id' => $reply_to->{'correlation_id'}},
 				 body => JSON::XS::encode_json(\%error));
+    $rabbit_mq_channel->ack();
+
 }
 
 
+sub _parse_input_parameters{
+    my $self = shift;
+    my $inputs = shift;
+    my $default_input_validators = shift;
+
+    foreach my $param (sort keys(%{$self->{'input_params'}})) {
+
+	my $pattern                         = $self->{'input_params'}{$param}{'pattern'};
+	my $required                        = $self->{'input_params'}{$param}{'required'};
+	my $multiple                        = $self->{'input_params'}{$param}{'multiple'};
+	my $default                         = $self->{'input_params'}{$param}{'default'};
+	my $ignore_default_input_validators = $self->{'input_params'}{$param}{'ignore_default_input_validators'};
+	my $input_validators                = $self->{'input_params'}{$param}{'input_validators'};
+	my $min_length                      = $self->{'input_params'}{$param}{'min_length'};
+	my $max_length                      = $self->{'input_params'}{$param}{'max_length'};
+	my $allow_null                      = $self->{'input_params'}{$param}{'allow_null'};
+	my $attachment                      = $self->{'input_params'}{$param}{'attachment'};
+	my $validation_error_text           = $self->{'input_params'}{$param}{'validation_error_text'};
+	my $schema                          = $self->{'input_params'}{$param}{'schema'};
+
+	
+
+
+
+	my $input = $inputs->{$param};
+
+	if($schema){
+	    return $input;
+	}
+
+	my @input_array;
+	if(ref($input) eq 'ARRAY'){
+	    @input_array = @{$input};
+	}else{
+	    $input_array[0] = $input;
+	}
+	
+	my $input_cnt = scalar @{$input};
+	if ($input_cnt == 0) {
+	    #--- if input is not defined then set the input equal
+	    #--- to the default for this parameter
+	    
+	    if (ref($default) eq "ARRAY") {
+		
+		@input_array = @$default;
+	    }
+	    
+	    else {
+		
+		$input_array[0] = $default;
+	    }
+	}
+	
+	# clear out existing array, if any, to avoid infinitely growing arrays in a mod_perl environment
+	undef($self->{'input_params'}{$param}{'value'});
+	$self->{'input_params'}{$param}{'is_set'} = 0;
+	
+	# perform the proper input validation on every supplied argument to this parameter
+	foreach my $input (@input_array) {
+	    
+	    # ISSUE=8595 strip all leading and trailing whitespace if not attachment
+	    $input =~ s/^\s+|\s+$//g if ( defined( $input ) && !$attachment );
+	    
+	    # value not supplied for parameter
+	    if ( !defined( $input ) ) {
+		
+		# it was a required parameter
+		if ( $required ) {
+		    
+		    $self->set_error( $self->{'name'}.": required input parameter $param is missing " );
+		    return undef;
+		}
+	    }
+	    
+	    # value was given for parameter
+	    else {
+		
+		$self->{'input_params'}{$param}{'is_set'} = 1;
+		
+		# handle NULL parameters
+		if ( $input eq "" ) {
+		    if ( !$allow_null ) {
+			$self->set_error( $self->{'name'}.": input parameter $param cannot be NULL " );
+			return undef;
+		    }
+		    
+		    if ( $multiple ) {
+			push( @{$self->{'input_params'}{$param}{'value'}}, undef );
+		    }
+		    else {
+			$self->{'input_params'}{$param}{'value'} = undef;
+		    }
+		}
+		
+		#--- parameter exists
+		elsif ( $input eq "" || # dont pattern match on a NULL value
+			( !$attachment && Encode::decode( 'UTF-8', $input ) =~ /$pattern/ ) || # if its not an attachment, decode UTF-8 first
+			( $attachment && $input =~ /$pattern/ ) ) { # its an attachment, do not decode UTF-8
+		    
+		    my $input_value = $1;
+		    my $filename = undef;
+		    my $mime_type = undef;
+		    
+		    # re-encode back to UTF-8 if not an attachment
+		    $input_value = Encode::encode( 'UTF-8', $input_value ) if ( !$attachment );
+		    
+		    if (defined($min_length) && length($input) < $min_length) {
+			$self->set_error( $self->{'name'} . ": input parameter $param is shorter than the specified minimum length of $min_length." );
+			return undef;
+		    }
+		    if (defined($max_length) && length($input) > $max_length) {
+			$self->set_error( $self->{'name'} . ": input parameter $param is longer than the specified maximum length of $max_length." );
+			return undef;
+		    }
+		    
+		    # make sure this input parameter validates against every default input validator subroutine
+		    if ( !$ignore_default_input_validators ) {
+			
+			foreach my $default_input_validator ( @$default_input_validators ) {
+			    
+			    my $callback = $default_input_validator->{'callback'};
+			    
+			    # execute the input validator subroutine, passing in the inputs to this parameter
+			    my $is_valid = &$callback( $self, $input );
+			    
+			    if ( !$is_valid ) {
+				
+				$self->set_error( $self->{'name'} . ": input parameter $param does not pass default input validators." );
+				return undef;
+			    }
+			}
+		    }
+		    
+		    # make sure this input parameter validates any specific input validators
+		    foreach my $input_validator ( @$input_validators ) {
+			
+			my $callback = $input_validator->{'callback'};
+			
+			my $is_valid = &$callback( $self, $input );
+			
+			if ( !$is_valid ) {
+			    
+			    $self->set_error( $self->{'name'} . ": input parameter $param does not pass input validators." );
+			    return undef;
+			}
+		    }
+		    
+		    if ($multiple) {      
+
+			push(@{$self->{'input_params'}{$param}{'value'}},$input_value);
+		    }
+		    else {
+			$self->{'input_params'}{$param}{'value'} = $input_value;
+		    }
+		    
+		    if ($self->{'debug'}) {
+			warn "- setting $param == $input_value\n";
+		    }
+		}
+		else {
+		    
+		    $self->set_error($self->{'name'} . ': ' . $validation_error_text);
+		    return undef;
+		    
+		}
+		
+	    }
+	}
+	
+    }
+    return 1;
+}
 
 =head2 handle_request()
  method called by dispatcher when a request comes in, passes
@@ -278,7 +621,7 @@ sub _return_error{
 =cut
 
 sub handle_request {
-    my ( $self, $rabbit_mq_channel, $reply_to, $body ) = @_;
+    my ( $self, $rabbit_mq_channel, $reply_to, $body, $default_input_validators, $state ) = @_;
 
     my $res = $self->_validate_schema($body);
     if (!defined $res) {
@@ -286,9 +629,16 @@ sub handle_request {
 	return;
     }
 
+    $res = $self->_parse_input_parameters( decode_json($body), $default_input_validators);
+
+    if (!defined $res) {
+        $self->_return_error($rabbit_mq_channel, $reply_to);
+        return;
+    }
+
     #--- call the callback
     my $callback    = $self->{'callback'};
-    my $results     = &$callback($self,decode_json($body));
+    my $results     = &$callback($self,$self->{'input_params'},$state);
     
     if (!defined $results) {
 	$self->_return_error($rabbit_mq_channel, $reply_to);

@@ -52,24 +52,40 @@ use warnings;
 
 our $VERSION = '1.0.0';
 
-sub new {
-    my $caller = shift;
+sub connect_to_rabbit{
+    my %args = ( host => 'localhost',
+		 port => 5672,
+		 user => undef,
+		 pass => undef,
+		 vhost => undef,
+		 timeout => 10,
+		 on_success => GRNOC::RabbitMQ::on_success_handler,
+		 on_failure => GRNOC::RabbitMQ::on_failure_handler,
+		 on_read_failure => GRNOC::RabbitMQ::on_read_failure_hander,
+		 on_return => GRNOC::RabbitMQ::on_return_handler,
+		 on_close => GRNOC:RabbitMQ::on_close_handler	
+		 @_);
+    
+    my $cv = AnyEvent->condvar;
+    my $rabbit_mq;
+    my $ar = AnyEvent::RabbitMQ->new->load_xml_spec()->connect(
+        host => $args{'host'},
+        port => $args{'port'},
+        user => $args{'user'},
+        pass => $args{'pass'},
+        vhost => $args{'vhost'},
+        timeout => $args{'timeout'},
+        tls => 0,
+        on_success => $args{'on_success'},		
+        on_failure => $args{'on_failure'},
+        on_read_failure => $args{'on_read_failure'},
+        on_return  => $args{'on_return'},
+        on_close   => $args{'on_close'}
+	);
 
-    my $class = ref( $caller );
-    $class = $caller if ( !$class );
-
-    my $self = {
-        @_
-    };
-
-    bless( $self, $class );
-
-    return $self;
-
-
-sub get_version{
-    my $self = shift;
-    return $VERSION;
+    return $ar;
 }
+
+
 
 1;

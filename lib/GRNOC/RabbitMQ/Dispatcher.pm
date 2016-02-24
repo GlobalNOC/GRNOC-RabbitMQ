@@ -122,6 +122,8 @@ sub _connect_to_rabbit{
 
     my $cv = AnyEvent->condvar;
     my $rabbit_mq;
+
+    $self->{'logger'}->error("Attempting to connect with: " . Data::Dumper::Dumper($self));
     my $ar = AnyEvent::RabbitMQ->new->load_xml_spec()->connect(
 	host => $self->{'host'},
 	port => $self->{'port'},
@@ -175,6 +177,10 @@ sub _connect_to_rabbit{
     $self->{'ar'} = $ar;
     $self->{'rabbit_mq'} = $rabbit_mq;
 
+    if(!defined($rabbit_mq)){
+	die "unable to connect to RabbitMQ";
+    }
+
     $cv = AnyEvent->condvar;
 
     $self->{'rabbit_mq'}->declare_queue( queue => $self->{'queue'},
@@ -189,6 +195,13 @@ sub _connect_to_rabbit{
 					 });
     $cv->recv();
 
+    my $dispatcher = $self;
+    $self->{'rabbit_mq'}->consume( queue => $self->{'queue'},
+                                   on_consume => sub {
+                                       my $message = shift;
+                                       $dispatcher->handle_request($message);
+                                   });
+    
     return;
 
 }
@@ -226,7 +239,7 @@ sub help{
 sub _return_error{
     my $self        = shift;
     my $reply_to    = shift;
-    my $rabbit_mq_connection = $self->{'rabbit_mq_connection'};
+    my $rabbit_mq_connection = $self->{'rabbit_mq'};
 
     my %error;
 
@@ -239,6 +252,8 @@ sub _return_error{
 				    routing_key => $reply_to->{'routing_key'},
 				    header => {'correlation_id' => $reply_to->{'correlation_id'}},
 				    body => JSON::XS::encode_json(\%error));
+    $rabbit_mq_connection->ack();
+    
 }
 
 
@@ -249,6 +264,8 @@ sub _return_error{
 sub handle_request{
     my $self = shift;
     my $var = shift;
+
+    my $state = $self->{'state'};
 
     my $reply_to = {};
     $reply_to->{'exchange'} = $var->{'deliver'}->{'method_frame'}->{'exchange'};
@@ -283,7 +300,8 @@ sub handle_request{
     #--- have the method do its thing;
     $self->{'methods'}{$method}->handle_request( $self->{'rabbit_mq'},
 						 $reply_to,
-						 $var->{'body'}->{'payload'});
+						 $var->{'body'}->{'payload'}, $self->{'default_input_validators'},
+						 $state);
 
     return 1;
 }
@@ -370,16 +388,16 @@ sub register_method{
     return 1;
 }
 
+=head2 start_consuming
+
+please note that start_consuming will block forever in your application
+
+=cut
+
 sub start_consuming{
     my $self = shift;
-    
-    my $dispatcher = $self;
-    $self->{'rabbit_mq'}->consume( queue => $self->{'queue'},
-                                   on_consume => sub {
-				       my $message = shift;
-				       $dispatcher->handle_request($message);
-                                   });
-
+    my $state = shift;
+    $self->{'state'} = $state;
     AnyEvent->condvar->recv;
 }
 
