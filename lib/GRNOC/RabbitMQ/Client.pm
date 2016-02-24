@@ -162,12 +162,28 @@ sub _connect{
     my $cbq = $cv->recv();
     $self->{'callback_queue'} = $cbq;
 
+    $self->{'rabbit_mq'}->consume(
+        no_ack => 1,
+        on_consume => $self->on_response_cb(),
+	);
+    
     return;
 }
 
 sub _generate_uuid{
     my $self = shift;
     return $self->{'uuid'}->to_string($self->{'uuid'}->create());
+}
+
+sub on_response_cb {
+    my $self = shift;
+    return  sub {
+	my $var = shift;
+	my $body = $var->{body}->{payload};
+	if ($self->{correlation_id} eq $var->{header}->{correlation_id}) {
+	    $self->{cv}->send($body);
+	}
+    };
 }
 
 sub AUTOLOAD{
@@ -185,28 +201,8 @@ sub AUTOLOAD{
     my $cv = AnyEvent->condvar;
     my $corr_id = $self->_generate_uuid();
 
-    sub on_response_cb {
-        my %a   = (
-            condvar         => undef,
-            correlation_id  => undef,
-            @_
-        );
-        return  sub {
-            my $var = shift;
-            my $body = $var->{body}->{payload};
-	    if ($a{correlation_id} eq $var->{header}->{correlation_id}) {
-                $a{condvar}->send($body);
-            }
-        };
-    }
-
-    $self->{'rabbit_mq'}->consume(
-        no_ack => 1,
-        on_consume => on_response_cb(
-            condvar         => $cv,
-            correlation_id  => $corr_id,
-        ),
-    );
+    $self->{'correlation_id'} = $corr_id;
+    $self->{'cv'} = $cv;
 
     $self->{'rabbit_mq'}->publish(
         exchange => $self->{'exchange'},
@@ -219,6 +215,7 @@ sub AUTOLOAD{
     );
 
     my $res = $cv->recv;
+
     return decode_json($res);
 }
 
