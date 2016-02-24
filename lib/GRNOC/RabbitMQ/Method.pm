@@ -474,24 +474,20 @@ sub _parse_input_parameters{
 
 	my @input_array;
 	if(ref($input) eq 'ARRAY'){
-	    @input_array = @{$input};
-	}else{
-	    $input_array[0] = $input;
-	}
-	
-	my $input_cnt = scalar @{$input};
-	if ($input_cnt == 0) {
-	    #--- if input is not defined then set the input equal
-	    #--- to the default for this parameter
-	    
-	    if (ref($default) eq "ARRAY") {
-		
-		@input_array = @$default;
+	    if(scalar @{$input} == 0){
+		if (ref($default) eq "ARRAY") {
+		    @input_array = @$default;
+		}else {
+		    $input_array[0] = $default;
+		}
+	    }else{
+		@input_array = @{$input};
 	    }
-	    
-	    else {
-		
+	}else{
+	    if(!defined($input)){
 		$input_array[0] = $default;
+	    }else{
+		$input_array[0] = $input;
 	    }
 	}
 	
