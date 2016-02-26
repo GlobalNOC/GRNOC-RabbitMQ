@@ -92,6 +92,7 @@ sub _connect{
 
     my $cv = AnyEvent->condvar;
     my $rabbit_mq;
+
     my $ar = AnyEvent::RabbitMQ->new->load_xml_spec()->connect(
 	host => $self->{'host'},
 	port => $self->{'port'},
@@ -142,7 +143,7 @@ sub _connect{
     #synchronize
     $cv->recv();
 
-    $self->{'logger'}->debug("");
+    $self->{'logger'}->debug("Connected to Rabbit");
 
     $cv = AnyEvent->condvar;
 
@@ -198,25 +199,39 @@ sub AUTOLOAD{
 	@_
     };
 
-    my $cv = AnyEvent->condvar;
-    my $corr_id = $self->_generate_uuid();
+    if(defined($params->{'no_reply'}) && $params->{'no_reply'} == 1){
+	delete $params->{'no_reply'};
+	$self->{'rabbit_mq'}->publish(
+	    exchange => $self->{'exchange'},
+	    routing_key => $self->{'queue'} . "." . $name,
+	    header => {
+		no_reply => 1,
+	    },
+	    body => encode_json($params)
+	    );
+	return;
+    }else{
+	delete $params->{'no_reply'};
+	my $cv = AnyEvent->condvar;
+	my $corr_id = $self->_generate_uuid();
+	
+	$self->{'correlation_id'} = $corr_id;
+	$self->{'cv'} = $cv;
+	
+	$self->{'rabbit_mq'}->publish(
+	    exchange => $self->{'exchange'},
+	    routing_key => $self->{'queue'} . "." . $name,
+	    header => {
+		reply_to => $self->{'callback_queue'},
+		correlation_id => $corr_id,
+	    },
+	    body => encode_json($params)
+	    );
 
-    $self->{'correlation_id'} = $corr_id;
-    $self->{'cv'} = $cv;
+	my $res = $cv->recv;
 
-    $self->{'rabbit_mq'}->publish(
-        exchange => $self->{'exchange'},
-        routing_key => $self->{'queue'} . "." . $name,
-        header => {
-            reply_to => $self->{'callback_queue'},
-            correlation_id => $corr_id,
-        },
-        body => encode_json($params)
-    );
-
-    my $res = $cv->recv;
-
-    return decode_json($res);
+	return decode_json($res);
+    }
 }
 
 sub DESTROY{

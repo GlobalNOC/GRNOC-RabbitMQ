@@ -250,7 +250,7 @@ sub add_input_parameter{
 	return;
     }
 
-    if (!defined $args{'validation_error_text'}){
+    if (!defined $args{'validation_error_text'} && defined($args{'pattern'})){
 	my $error_text;
 	my $pattern = $args{'pattern'};
 	my $name    = $args{'name'};
@@ -412,6 +412,11 @@ sub _return_results{
     my $reply_to = shift;
     my $results = shift;
 
+    if(!defined($reply_to->{'routing_key'})){
+	$rabbit_mq_channel->ack();
+	return;
+    }
+
     $results = {results => $results};
 
     my $json = encode_json($results);
@@ -443,6 +448,11 @@ sub _return_error{
 
     #--- would be nice if client could pass a output format param and select between json and xml?
     
+    if(!defined($reply_to->{'routing_key'})){
+	$rabbit_mq_channel->ack();
+	return;
+    }
+
     $rabbit_mq_channel->publish( exchange => $reply_to->{'exchange'},
 				 routing_key => $reply_to->{'routing_key'},
 				 header => {'correlation_id' => $reply_to->{'correlation_id'}},
