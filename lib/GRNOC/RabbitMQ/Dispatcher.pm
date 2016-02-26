@@ -181,21 +181,22 @@ sub _connect_to_rabbit{
     }
 
     $cv = AnyEvent->condvar;
-
-    $self->{'rabbit_mq'}->declare_queue( queue => $self->{'queue'},
+    
+    $self->{'rabbit_mq'}->declare_queue( 
 					 on_success => sub {
-					     $self->{'rabbit_mq'}->bind_queue( queue => $self->{'queue'},
+					     my $queue = shift;
+					     $self->{'rabbit_mq'}->bind_queue( queue => $queue->{method_frame}->{queue},
 									       exchange => $self->{'exchange'},
 									       routing_key => $self->{'queue'} . '.*',
 									       on_success => sub {
-										   $cv->send();
+										   $cv->send($queue);
 									       });
 
 					 });
-    $cv->recv();
+    my $queue = $cv->recv();
 
     my $dispatcher = $self;
-    $self->{'rabbit_mq'}->consume( queue => $self->{'queue'},
+    $self->{'rabbit_mq'}->consume( queue => $queue->{method_frame}->{queue},
                                    on_consume => sub {
                                        my $message = shift;
                                        $dispatcher->handle_request($message);
@@ -245,7 +246,12 @@ sub _return_error{
     $error{"error"} = 1;
     $error{'error_text'} = $self->get_error();
     $error{'results'} = undef;
+    
+    if(!defined($reply_to->{'routing_key'})){
+	$rabbit_mq_connection->ack();
+	return;
 
+    }
     
     $rabbit_mq_connection->publish( exchange => $reply_to->{'exchange'},
 				    routing_key => $reply_to->{'routing_key'},
@@ -265,11 +271,17 @@ sub handle_request{
     my $var = shift;
 
     my $state = $self->{'state'};
-
     my $reply_to = {};
-    $reply_to->{'exchange'} = $var->{'deliver'}->{'method_frame'}->{'exchange'};
-    $reply_to->{'correlation_id'} = $var->{'header'}->{'correlation_id'},
-    $reply_to->{'routing_key'} = $var->{'header'}->{'reply_to'};
+    if(defined($var->{'header'}->{'no_reply'}) && $var->{'header'}->{'no_reply'} == 1){
+
+	$self->{'logger'}->debug("No Reply specified");
+	
+    }else{
+	$self->{'logger'}->debug("Has reply specified");
+	$reply_to->{'exchange'} = $var->{'deliver'}->{'method_frame'}->{'exchange'};
+	$reply_to->{'correlation_id'} = $var->{'header'}->{'correlation_id'},
+	$reply_to->{'routing_key'} = $var->{'header'}->{'reply_to'};
+    }
 
     my $full_method = $var->{'deliver'}->{'method_frame'}->{'routing_key'};
 
