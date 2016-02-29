@@ -45,7 +45,7 @@ use Data::Dumper;
 
 sub main{
 
-    my $client = GRNOC::RabbitMQ::Client->new(queue => "OF.FWDCTL",
+    my $client = GRNOC::RabbitMQ::Client->new(topi => "OF.FWDCTL",
                                               exchange => 'OESS',
                                               user => 'guest',
                                               pass => 'guest');
@@ -70,6 +70,7 @@ sub new{
 		 vhost => '/',
 		 timeout => 1,
 		 queue => undef,
+		 topic => undef,
 		 exchange => '',
 		 @_ );
 
@@ -203,7 +204,7 @@ sub AUTOLOAD{
 	delete $params->{'no_reply'};
 	$self->{'rabbit_mq'}->publish(
 	    exchange => $self->{'exchange'},
-	    routing_key => $self->{'queue'} . "." . $name,
+	    routing_key => $self->{'topic'} . "." . $name,
 	    header => {
 		no_reply => 1,
 	    },
@@ -220,7 +221,7 @@ sub AUTOLOAD{
 	
 	$self->{'rabbit_mq'}->publish(
 	    exchange => $self->{'exchange'},
-	    routing_key => $self->{'queue'} . "." . $name,
+	    routing_key => $self->{'topic'} . "." . $name,
 	    header => {
 		reply_to => $self->{'callback_queue'},
 		correlation_id => $corr_id,
