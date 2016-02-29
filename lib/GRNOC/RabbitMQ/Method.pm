@@ -73,6 +73,7 @@ sub new{
     
     my %valid_parameter_list = (
 	'name' => 1,
+	'topic' => 1,
 	'callback' => 1,
 	'is_default' => 1,
 	'debug' => 1,
@@ -88,6 +89,7 @@ sub new{
 	callback         => undef,
 	description      => undef,
 	debug            => 0,
+	topic            => undef,
 	@_,
 	);
 
@@ -133,6 +135,14 @@ returns the registerd method name for this method object.
 sub get_name{
     my $self  = shift;
     return $self->{'name'};
+}
+
+sub update_name{
+    my $self = shift;
+    my $name = shift;
+
+    $self->{'name'} = $name;
+    return;
 }
 
 sub set_schema_validator{

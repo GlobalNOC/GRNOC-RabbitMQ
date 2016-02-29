@@ -36,7 +36,8 @@ use GRNOC::RabbitMQ::Method;
 
 sub main{
 
-    my $dispatcher = GRNOC::RabbitMQ::Dispatcher->new(queue => "OF.FWDCTL",
+    my $dispatcher = GRNOC::RabbitMQ::Dispatcher->new(queue => "OF-FWDCTL",
+						      topic => "OF.FWDCTL",
                                                       exchange => 'OESS',
                                                       user => 'guest',
                                                       pass => 'guest');
@@ -69,6 +70,7 @@ sub new{
     
     my %args = (
 	debug                => 0,
+	topic => undef,
 	host => 'localhost',
 	port => 5672,
 	user => undef,
@@ -87,8 +89,8 @@ sub new{
 
     $self->{'logger'} = GRNOC::Log->get_logger();
 
-    if(!defined($self->{'queue'})){
-	$self->{'logger'}->error("No Queue defined!!!");
+    if(!defined($self->{'topic'})){
+	$self->{'logger'}->error("No topic defined!!!");
 	return;
     }
 
@@ -182,18 +184,13 @@ sub _connect_to_rabbit{
 
     $cv = AnyEvent->condvar;
     
-    $self->{'rabbit_mq'}->declare_queue( 
+    $self->{'rabbit_mq'}->declare_queue( queue => $self->{'queue'}, 
 					 on_success => sub {
 					     my $queue = shift;
-					     $self->{'rabbit_mq'}->bind_queue( queue => $queue->{method_frame}->{queue},
-									       exchange => $self->{'exchange'},
-									       routing_key => $self->{'queue'} . '.*',
-									       on_success => sub {
-										   $cv->send($queue);
-									       });
-
+					     $cv->send($queue);
 					 });
     my $queue = $cv->recv();
+    $self->{'rabbit_mq_queue'} = $queue;
 
     my $dispatcher = $self;
     $self->{'rabbit_mq'}->consume( queue => $queue->{method_frame}->{queue},
@@ -283,17 +280,15 @@ sub handle_request{
 	$reply_to->{'routing_key'} = $var->{'header'}->{'reply_to'};
     }
 
-    my $full_method = $var->{'deliver'}->{'method_frame'}->{'routing_key'};
+    my $method = $var->{'deliver'}->{'method_frame'}->{'routing_key'};
 
-    my $queue_name = $self->{'queue'};
-    $full_method =~ /$queue_name\.(\S+)/;
 
-    my $method = $1;
 
+    
     if(!defined($method)){
 	$method = "help";
     }
-
+    
     #--- check for properly formed method
     if (!defined $method) {
 	$self->_set_error("format error with method name");
@@ -378,7 +373,15 @@ sub register_method{
     my $self  = shift;
     my $method_ref  = shift;
 
+    my $topic = $self->{'topic'};
+    if(defined($method_ref->{'topic'})){
+        $topic = $method_ref->{'topic'};
+    }
+
+    $method_ref->update_name( $topic . "." .  $method_ref->get_name());
+    
     my $method_name = $method_ref->get_name();
+    
     if (!defined $method_name) {
 	$self->{'logger'}->error(ref $method_ref."->get_name() returned undef");
 	return;
@@ -395,6 +398,16 @@ sub register_method{
     }
     #--- set the Dispatcher reference
     $method_ref->set_dispatcher($self);
+
+    my $cv = AnyEvent->condvar;
+    $self->{'rabbit_mq'}->bind_queue( queue => $self->{'rabbit_mq_queue'}->{method_frame}->{queue},
+				      exchange => $self->{'exchange'},
+				      routing_key => $method_ref->get_name(),
+				      on_success => sub {
+					  $cv->send();
+				      });
+    
+    $cv->recv;
 
     return 1;
 }
