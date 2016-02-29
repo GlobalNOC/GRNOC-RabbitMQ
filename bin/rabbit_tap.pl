@@ -80,26 +80,26 @@ sub main{
 
     $cv = AnyEvent->condvar;
     
-    $rabbit_mq->declare_queue(
-	on_success => sub {
-	    my $queue = shift;
-	    $rabbit_mq->bind_queue( queue => $queue->{method_frame}->{queue},
-				    exchange => $exchange,
-				    routing_key => $topic,
-				    on_success => sub {
-					$cv->send($queue);
-				    });
-	    
-	});
+    $rabbit_mq->declare_queue( exclusive => 1,
+			       on_success => sub {
+				   my $queue = shift;
+				   $rabbit_mq->bind_queue( queue => $queue->{method_frame}->{queue},
+							   exchange => $exchange,
+							   routing_key => $topic,
+							   on_success => sub {
+							       $cv->send($queue);
+							   });
+				   
+			       });
     my $queue = $cv->recv();
-
+    
     
     $rabbit_mq->consume( queue => $queue->{method_frame}->{queue},
 			 on_consume => sub {
 			     my $message = shift;
 			     print_messages($message);
 			 });    
-
+    
 
     AnyEvent->condvar->recv;
 }
