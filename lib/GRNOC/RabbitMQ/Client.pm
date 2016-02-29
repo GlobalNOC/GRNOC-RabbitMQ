@@ -229,6 +229,10 @@ sub AUTOLOAD{
 	    body => encode_json($params)
 	    );
 
+	my $timeout = AnyEvent->timer( after => $self->{'timeout'}, 
+				       cb => sub{ $cv->send('{"error":"Timeout occured waiting for response"}');
+				       });
+
 	my $res = $cv->recv;
 
 	return decode_json($res);
