@@ -93,7 +93,6 @@ sub new{
 	$self->{'logger'}->error("No topic defined!!!");
 	return;
     }
-
     $self->_connect_to_rabbit();
 
     #--- register the help method
