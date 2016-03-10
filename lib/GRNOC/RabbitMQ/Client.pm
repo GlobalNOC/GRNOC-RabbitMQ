@@ -68,7 +68,7 @@ sub new{
 		 user => undef,
 		 pass => undef,
 		 vhost => '/',
-		 timeout => 1,
+		 timeout => 15,
 		 queue => undef,
 		 topic => undef,
 		 exchange => '',
@@ -80,6 +80,8 @@ sub new{
 
     $self->{'uuid'} = new Data::UUID;
     bless $self, $class;
+
+    $self->{'pending_responses'} = {};
     
     $self->_connect();
 
@@ -165,8 +167,9 @@ sub _connect{
     $self->{'callback_queue'} = $cbq;
 
     $self->{'rabbit_mq'}->consume(
-        no_ack => 1,
-        on_consume => $self->on_response_cb(),
+                                  no_ack => 1,
+                                  on_consume => $self->on_response_cb(),
+                                  on_success => sub { print "YES!!!!\n"},
 	);
     
     return;
@@ -182,9 +185,20 @@ sub on_response_cb {
     return  sub {
 	my $var = shift;
 	my $body = $var->{body}->{payload};
-	if ($self->{correlation_id} eq $var->{header}->{correlation_id}) {
-	    $self->{cv}->send($body);
-	}
+        
+        $self->{'logger'}->error("on_response_cb callback args: " . Data::Dumper::Dumper($var));
+
+        $self->{'logger'}->error("Pending Responses: " . Data::Dumper::Dumper($self->{'pending_responses'}));
+        
+        my $corr_id = $var->{header}->{correlation_id};
+        if (defined $self->{'pending_responses'}->{$corr_id}) {
+            $self->{'logger'}->error("on_response_db callback result: " . $body);
+
+            $self->{'pending_responses'}->{$corr_id}(decode_json($body));
+            delete $self->{'pending_responses'}->{$corr_id};
+        } else {
+            $self->{'logger'}->error("I don't know what to do with corr_id: $corr_id");
+        }
     };
 }
 
@@ -195,7 +209,7 @@ sub AUTOLOAD{
 
     my @stuff = split('::', $name);
     $name = pop(@stuff);
-
+    $self->{'logger'}->error("Running name: " . $name . "\n");
     my $params = {
 	@_
     };
@@ -213,12 +227,20 @@ sub AUTOLOAD{
 	return;
     }else{
 	delete $params->{'no_reply'};
-	my $cv = AnyEvent->condvar;
+        my $do_async = 0;
+        my $cv = AnyEvent->condvar;
+        my $callback = sub { my $results = shift; $cv->send($results)};
+        if(defined($params->{'async_callback'})){
+            $callback = $params->{'async_callback'};
+            delete $params->{'async_callback'};
+            $do_async = 1;
+        }
+        
 	my $corr_id = $self->_generate_uuid();
-	
-	$self->{'correlation_id'} = $corr_id;
-	$self->{'cv'} = $cv;
-	
+        $self->{'pending_responses'}->{$corr_id} = $callback;
+
+        $self->{'logger'}->error("Correlation ID: " . $corr_id);
+        
 	$self->{'rabbit_mq'}->publish(
 	    exchange => $self->{'exchange'},
 	    routing_key => $self->{'topic'} . "." . $name,
@@ -229,13 +251,17 @@ sub AUTOLOAD{
 	    body => encode_json($params)
 	    );
 
-	my $timeout = AnyEvent->timer( after => $self->{'timeout'}, 
-				       cb => sub{ $cv->send('{"error":"Timeout occured waiting for response"}');
-				       });
 
-	my $res = $cv->recv;
-
-	return decode_json($res);
+        if(!$do_async){
+            
+            my $timeout = AnyEvent->timer( after => $self->{'timeout'}, 
+                                           cb => sub{ $cv->send('{"error":"Timeout occured waiting for response"}'); });
+            
+            my $res = $cv->recv();
+            return $res;
+        }
+        
+        $self->{'logger'}->error("Moving on...")
     }
 }
 
