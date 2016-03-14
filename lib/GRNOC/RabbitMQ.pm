@@ -46,11 +46,15 @@ You can find documentation for this module with the perldoc command.
     perldoc GRNOC::RabbitMQ
 =cut
 
-
 use strict;
 use warnings;
 
 our $VERSION = '1.0.0';
+
+use GRNOC::RabbitMQ::Client;
+use GRNOC::RabbitMQ::Dispatcher;
+use GRNOC::RabbitMQ::Method;
+
 
 sub connect_to_rabbit{
     my %args = ( host => 'localhost',
@@ -63,7 +67,7 @@ sub connect_to_rabbit{
 		 on_failure => GRNOC::RabbitMQ::on_failure_handler,
 		 on_read_failure => GRNOC::RabbitMQ::on_read_failure_hander,
 		 on_return => GRNOC::RabbitMQ::on_return_handler,
-		 on_close => GRNOC:RabbitMQ::on_close_handler	
+		 on_close => GRNOC::RabbitMQ::on_close_handler	
 		 @_);
     
     my $cv = AnyEvent->condvar;
@@ -86,6 +90,9 @@ sub connect_to_rabbit{
     return $ar;
 }
 
+sub on_close_handler{
+    
+}
 
 
 1;

@@ -305,7 +305,8 @@ sub handle_request{
     #--- have the method do its thing;
     $self->{'methods'}{$method}->handle_request( $self->{'rabbit_mq'},
 						 $reply_to,
-						 $var->{'body'}->{'payload'}, $self->{'default_input_validators'},
+						 $var->{'body'}->{'payload'},
+						 $self->{'default_input_validators'},
 						 $state);
 
     return 1;

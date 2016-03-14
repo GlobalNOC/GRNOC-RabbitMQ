@@ -129,7 +129,7 @@ sub _connect{
 	on_read_failure => sub { die @_ },
 	on_return  => sub {
 	    my $frame = shift;
-	    die "Unable to deliver ", Dumper($frame);
+	    die "Unable to deliver ", Data::Dumper::Dumper($frame);
 	},
 	on_close   => sub {
 	    my $why = shift;
@@ -168,8 +168,7 @@ sub _connect{
 
     $self->{'rabbit_mq'}->consume(
                                   no_ack => 1,
-                                  on_consume => $self->on_response_cb(),
-                                  on_success => sub { print "YES!!!!\n"},
+                                  on_consume => $self->on_response_cb()
 	);
     
     return;
@@ -186,18 +185,18 @@ sub on_response_cb {
 	my $var = shift;
 	my $body = $var->{body}->{payload};
         
-        $self->{'logger'}->error("on_response_cb callback args: " . Data::Dumper::Dumper($var));
+        $self->{'logger'}->debug("on_response_cb callback args: " . Data::Dumper::Dumper($var));
 
-        $self->{'logger'}->error("Pending Responses: " . Data::Dumper::Dumper($self->{'pending_responses'}));
+        $self->{'logger'}->debug("Pending Responses: " . Data::Dumper::Dumper($self->{'pending_responses'}));
         
         my $corr_id = $var->{header}->{correlation_id};
         if (defined $self->{'pending_responses'}->{$corr_id}) {
-            $self->{'logger'}->error("on_response_db callback result: " . $body);
+            $self->{'logger'}->debug("on_response_db callback result: " . $body);
 
             $self->{'pending_responses'}->{$corr_id}(decode_json($body));
             delete $self->{'pending_responses'}->{$corr_id};
         } else {
-            $self->{'logger'}->error("I don't know what to do with corr_id: $corr_id");
+            $self->{'logger'}->debug("I don't know what to do with corr_id: $corr_id");
         }
     };
 }
@@ -209,7 +208,8 @@ sub AUTOLOAD{
 
     my @stuff = split('::', $name);
     $name = pop(@stuff);
-    $self->{'logger'}->error("Running name: " . $name . "\n");
+    $self->{'logger'}->debug("Running name: " . $name . "\n");
+    $self->{'logger'}->debug("Params: " . Data::Dumper::Dumper(@_));
     my $params = {
 	@_
     };
@@ -239,7 +239,7 @@ sub AUTOLOAD{
 	my $corr_id = $self->_generate_uuid();
         $self->{'pending_responses'}->{$corr_id} = $callback;
 
-        $self->{'logger'}->error("Correlation ID: " . $corr_id);
+        $self->{'logger'}->debug("Correlation ID: " . $corr_id);
         
 	$self->{'rabbit_mq'}->publish(
 	    exchange => $self->{'exchange'},
@@ -255,13 +255,15 @@ sub AUTOLOAD{
         if(!$do_async){
             
             my $timeout = AnyEvent->timer( after => $self->{'timeout'}, 
-                                           cb => sub{ $cv->send('{"error":"Timeout occured waiting for response"}'); });
+                                           cb => sub{ 
+					       $cv->send({error => "Timeout occured waiting for response"});
+					   });
             
             my $res = $cv->recv();
             return $res;
         }
         
-        $self->{'logger'}->error("Moving on...")
+        $self->{'logger'}->debug("Moving on...")
     }
 }
 
