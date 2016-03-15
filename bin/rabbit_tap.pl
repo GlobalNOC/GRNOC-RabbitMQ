@@ -110,10 +110,17 @@ sub print_messages{
     my $header = $message->{'header'};
     my $routing_key = $message->{'deliver'}->{'method_frame'}->{'routing_key'};
     my $body = $message->{'body'}->{'payload'};
-    
+
+    if(!defined($header->{'timestamp'})){
+	$header->{'timestamp'} = time();
+    }
+
     my $date = DateTime->from_epoch(epoch => $header->{'timestamp'});
-    
     my $date_str = $date->mdy('/') . "T" . $date->hms(':');
+
+    if(!defined($header->{'user_id'})){
+	$header->{'user_id'} = "UNKNOWN USER";
+    }
 
     if(defined($header->{'reply_to'})){
 	print $date_str . " to: " . $routing_key . ", from: " . $header->{'user_id'} . "@" . $header->{'reply_to'} . ", correlation_id: " . $header->{'correlation_id'} . ", Body: " . $body . "\n";

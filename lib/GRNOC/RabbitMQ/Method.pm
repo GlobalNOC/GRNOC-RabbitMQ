@@ -80,6 +80,7 @@ sub new{
 	'description' => 1,
 	'output_formatter' => 1,
 	'logger' => 1,
+	'async' => 1,
 	);
     
     #--- overide the defaults
@@ -666,16 +667,29 @@ sub handle_request {
 
     #--- call the callback
     my $callback    = $self->{'callback'};
-    my $results     = &$callback($self,$self->{'input_params'},$state);
-    
-    if (!defined $results) {
-	$self->_return_error($rabbit_mq_channel, $reply_to);
-	return;
-    }
-    else {
-    #--- return results
-	$self->_return_results($rabbit_mq_channel, $reply_to, $results);
+
+    $self->{'success_callback'} = sub { my $results = shift; $self->_return_results($rabbit_mq_channel, $reply_to, $results); };
+    $self->{'error_callback'} = sub { $self->_return_error($rabbit_mq_channel, $reply_to); };
+
+    if($self->{'async'}){
+	
+	my $results = &$callback($self,$self->{'input_params'},$state);
 	return 1;
+
+    }else{
+	my $results     = &$callback($self,$self->{'input_params'},$state);
+	
+	if (!defined $results) {
+	    my $error_callback = $self->{'error_callback'};
+	    &$error_callback();
+	    return;
+	}
+	else {
+	    #--- return results
+	    my $success_callback = $self->{'success_callback'};
+	    &$success_callback( $results );
+	    return 1;
+	}
     }
 }
 
