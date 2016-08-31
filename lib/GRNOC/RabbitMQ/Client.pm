@@ -19,6 +19,7 @@ use AnyEvent;
 use Data::UUID;
 use GRNOC::Log;
 use JSON::XS;
+use Time::HiRes qw( gettimeofday tv_interval);
 
 =head1 NAME
 
@@ -59,6 +60,9 @@ main();
 
 =cut
 
+=head2 new
+
+=cut
 
 sub new{
     my $class = shift;
@@ -179,12 +183,18 @@ sub _generate_uuid{
     return $self->{'uuid'}->to_string($self->{'uuid'}->create());
 }
 
+=head2 on_response_cb
+
+=cut
+
 sub on_response_cb {
     my $self = shift;
     return  sub {
 	my $var = shift;
 	my $body = $var->{body}->{payload};
         
+	my $end = [gettimeofday];
+
         $self->{'logger'}->debug("on_response_cb callback args: " . Data::Dumper::Dumper($var));
 
         $self->{'logger'}->debug("Pending Responses: " . Data::Dumper::Dumper($self->{'pending_responses'}));
@@ -192,8 +202,8 @@ sub on_response_cb {
         my $corr_id = $var->{header}->{correlation_id};
         if (defined $self->{'pending_responses'}->{$corr_id}) {
             $self->{'logger'}->debug("on_response_db callback result: " . $body);
-
-            $self->{'pending_responses'}->{$corr_id}(decode_json($body));
+	    $self->{'logger'}->debug("total time: " . tv_interval( $self->{'pending_responses'}->{$corr_id}->{'start'}, $end));
+            $self->{'pending_responses'}->{$corr_id}->{'cb'}(decode_json($body));
             delete $self->{'pending_responses'}->{$corr_id};
         } else {
             $self->{'logger'}->debug("I don't know what to do with corr_id: $corr_id");
@@ -229,6 +239,7 @@ sub AUTOLOAD{
 	delete $params->{'no_reply'};
         my $do_async = 0;
         my $cv = AnyEvent->condvar;
+
         my $callback = sub { my $results = shift; $cv->send($results)};
         if(defined($params->{'async_callback'})){
             $callback = $params->{'async_callback'};
@@ -237,7 +248,8 @@ sub AUTOLOAD{
         }
         
 	my $corr_id = $self->_generate_uuid();
-        $self->{'pending_responses'}->{$corr_id} = $callback;
+        $self->{'pending_responses'}->{$corr_id}{'cb'} = $callback;
+	$self->{'pending_responses'}->{$corr_id}{'start'} = [gettimeofday];
 
         $self->{'logger'}->debug("Correlation ID: " . $corr_id);
         
