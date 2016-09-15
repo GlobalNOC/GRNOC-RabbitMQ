@@ -18,6 +18,7 @@ use AnyEvent;
 use GRNOC::Log;
 use JSON::XS;
 use JSON::Schema;
+use GRNOC::WebService::Regex;
 
 =head1 NAME
 
