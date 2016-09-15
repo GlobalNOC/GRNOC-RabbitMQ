@@ -20,6 +20,7 @@ use Data::UUID;
 use GRNOC::Log;
 use JSON::XS;
 use Time::HiRes qw( gettimeofday tv_interval);
+use Data::Dumper;
 
 =head1 NAME
 
@@ -264,13 +265,28 @@ sub AUTOLOAD{
 	    );
 
 
+        my $timeout;
+        $timeout = AnyEvent->timer( after => $self->{'timeout'}, 
+                                    cb => sub{
+                                        if(!defined($self->{'pending_responses'}->{$corr_id})) {
+                                            return;
+                                        }
+                                        my $cb = $self->{'pending_responses'}->{$corr_id}{'cb'};
+                                        # deleting the pending response before calling back ensures $cb is only called once
+                                        delete $self->{'pending_responses'}->{$corr_id};
+
+                                        my $err = {error => "Timeout occured waiting for response"};
+                                        if($do_async){
+                                            &$cb($err);
+                                        }else{
+                                            $cv->send($err);
+                                        }
+
+                                        # needed to keep $timeout from being GCed before the timer fires
+                                        undef $timeout;
+                                    });
+
         if(!$do_async){
-            
-            my $timeout = AnyEvent->timer( after => $self->{'timeout'}, 
-                                           cb => sub{ 
-					       $cv->send({error => "Timeout occured waiting for response"});
-					   });
-            
             my $res = $cv->recv();
             return $res;
         }
