@@ -46,7 +46,7 @@ use Data::Dumper;
 
 sub main{
 
-    my $client = GRNOC::RabbitMQ::Client->new(topi => "OF.FWDCTL",
+    my $client = GRNOC::RabbitMQ::Client->new(topic => "OF.FWDCTL",
                                               exchange => 'OESS',
                                               user => 'guest',
                                               pass => 'guest');
