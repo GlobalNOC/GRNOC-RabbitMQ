@@ -42,6 +42,7 @@ use strict;
 use warnings;
 
 use GRNOC::RabbitMQ::Client;
+use AnyEvent;
 use Data::Dumper;
 
 sub main{
@@ -51,9 +52,20 @@ sub main{
                                               user => 'guest',
                                               pass => 'guest');
 
-    my $res = $client->do_stuff();
+    # synchronous call
+    my $res = $client->plus(a => 2, b => 2);
     warn Data::Dumper::Dumper($res);
 
+    # asynchronous call
+    my $cv = AnyEvent->condvar;
+    $client->plus(a => 2,
+                  b => 2,
+                  async_callback => sub {
+                      my $res = shift;
+                      warn Data::Dumper::Dumper($res);
+                      $cv->send;
+                  });
+    $cv->recv;
 }
 
 main();

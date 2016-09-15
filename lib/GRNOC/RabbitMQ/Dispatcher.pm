@@ -37,27 +37,36 @@ use GRNOC::RabbitMQ::Method;
 sub main{
 
     my $dispatcher = GRNOC::RabbitMQ::Dispatcher->new(queue => "OF-FWDCTL",
-						      topic => "OF.FWDCTL",
+                                                      topic => "OF.FWDCTL",
                                                       exchange => 'OESS',
                                                       user => 'guest',
                                                       pass => 'guest');
 
-    my $method = GRNOC::RabbitMQ::Method->new( name => "do_stuff",
-                                               callback => \&do_stuff,
-                                               description => "Does stuff" );
-    $method->set_schema_validator( schema => {});
+    my $method = GRNOC::RabbitMQ::Method->new( name => "plus",
+                                               callback => \&do_plus,
+                                               description => "Add numbers a and b together" );
+    $method->set_schema_validator( schema => {} );
+
+    $method->add_input_parameter( name => 'a',
+                                  description => 'first addend',
+                                  pattern => '^(-?[0-9]+)$' );
+
+    $method->add_input_parameter( name => 'b',
+                                  description => 'second addend',
+                                  pattern => '^(-?[0-9]+)$' );
 
     $dispatcher->register_method( $method );
 
     $dispatcher->start_consuming();
 }
 
-sub do_stuff{
-    my $json = shift;
+sub do_plus{
+    my ($method_obj,$params,$state) = @_;
 
-    warn "\o/ it just works\n";
+    my $a = $params->{'a'}{'value'};
+    my $b = $params->{'b'}{'value'};
 
-    return {success => 1};
+    return { result => ($a+$b) };
 }
 
 main();
