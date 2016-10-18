@@ -16,7 +16,8 @@ Requires: perl-AnyEvent-RabbitMQ
 Requires: perl-JSON-XS
 Requires: perl-JSON-Schema
 Requires: perl-autovivification
-Requires: perl(Data::Dumper)
+Requires: perl(GRNOC::WebService::Regex)
+
 
 %description
 The GRNOC::RabbitMQ collection is a set of perl modules which are used to
