@@ -34,9 +34,9 @@ parameters and OO where sensible.
 =head1 OVERVIEW OF CLASSES AND PACKAGES
 This table should give you a quick overview of the classes provided by the
 library. Indentation shows class inheritance.
-  GRNOC::RabbitMQ::Method    -- RabbitMQ Method handler object
+  GRNOC::RabbitMQ::Method      -- RabbitMQ Method handler object
   GRNOC::RabbitMQ::Dispatcher  -- RabbitMQ Dispatcher object
-  GRNOC::RabbitMQ::Client  -- RabbitMQ Client ojbect interface
+  GRNOC::RabbitMQ::Client      -- RabbitMQ Client ojbect interface
 =head1 AUTHOR
 GRNOC System Engineering, C<< <syseng at grnoc.iu.edu> >>
 =head1 BUGS
@@ -49,29 +49,31 @@ You can find documentation for this module with the perldoc command.
 use strict;
 use warnings;
 
+use AnyEvent::RabbitMQ;
+
 our $VERSION = '1.0.0';
-
-use GRNOC::RabbitMQ::Client;
-use GRNOC::RabbitMQ::Dispatcher;
-use GRNOC::RabbitMQ::Method;
-
 
 sub connect_to_rabbit{
     my %args = ( host => 'localhost',
 		 port => 5672,
-		 user => undef,
-		 pass => undef,
-		 vhost => undef,
+		 user => 'guest',
+		 pass => 'guest',
+		 vhost => '/',
 		 timeout => 10,
-		 on_success => GRNOC::RabbitMQ::on_success_handler,
-		 on_failure => GRNOC::RabbitMQ::on_failure_handler,
-		 on_read_failure => GRNOC::RabbitMQ::on_read_failure_hander,
-		 on_return => GRNOC::RabbitMQ::on_return_handler,
-		 on_close => GRNOC::RabbitMQ::on_close_handler	
+		 on_success => \&GRNOC::RabbitMQ::channel_creator,
+		 on_failure => \&GRNOC::RabbitMQ::on_failure_handler,
+		 on_read_failure => \&GRNOC::RabbitMQ::on_failure_handler,
+		 on_return => \&GRNOC::RabbitMQ::on_failure_handler,
+		 on_close => \&GRNOC::RabbitMQ::on_close_handler,
+		 exchange => undef,
+		 obj => undef,
+		 queue => undef,
+		 exclusive => undef, 
+		 type => undef,
 		 @_);
     
     my $cv = AnyEvent->condvar;
-    my $rabbit_mq;
+
     my $ar = AnyEvent::RabbitMQ->new->load_xml_spec()->connect(
         host => $args{'host'},
         port => $args{'port'},
@@ -80,18 +82,93 @@ sub connect_to_rabbit{
         vhost => $args{'vhost'},
         timeout => $args{'timeout'},
         tls => 0,
-        on_success => $args{'on_success'},		
-        on_failure => $args{'on_failure'},
-        on_read_failure => $args{'on_read_failure'},
-        on_return  => $args{'on_return'},
-        on_close   => $args{'on_close'}
+        on_success => $args{'on_success'}(cv => $cv, obj => $args{'obj'}, queue => $args{'queue'}, exclusive => $args{'exclusive'}, type => $args{'type'}, exchange => $args{'exchange'}),
+        on_failure => $args{'on_failure'}(cv => $cv, obj => $args{'obj'}),
+        on_read_failure => $args{'on_read_failure'}(cv => $cv, obj => $args{'obj'}),
+        on_return  => $args{'on_return'}(cv => $cv, obj => $args{'obj'}),
+        on_close   => $args{'on_close'}(obj => $args{'obj'})
 	);
+
+    my $status = $cv->recv();
+    
+    if(!$status){
+	return;
+    }
 
     return $ar;
 }
 
+sub on_read_failure{
+    return sub {
+	
+    };
+}
+
+
 sub on_close_handler{
+    my %params = @_;
+
+    return sub {
+	my $obj = $params{'obj'};
+	if($obj->is_consuming()){
+	    $obj->stop_consuming();
+	}
+    };
+
+}
+
+sub on_failure_handler{
+    my %params = @_;
+
+    return sub{
+	warn "FAILED!!!\n";
+	$params{'cv'}->send(0);
+    };
+
+}
+
+sub channel_creator{
+    my %params = @_;
     
+    return sub{
+        my $r = shift;
+
+        $r->open_channel( on_success => GRNOC::RabbitMQ::exchange_creator( %params ),
+			  on_failure => GRNOC::RabbitMQ::on_failure_handler( %params ),
+			  on_close   => GRNOC::RabbitMQ::on_close_handler( %params) );
+    };
+}
+
+sub exchange_creator{
+    my %params = @_;
+
+    return sub {
+	my $channel = shift;
+	$channel->declare_exchange( exchange => $params{'exchange'},
+				    type => $params{'type'},
+				    on_success => GRNOC::RabbitMQ::queue_declare($channel, %params),
+				    on_failure => GRNOC::RabbitMQ::on_failure_handler(%params) );
+    };
+}
+
+sub queue_declare{
+    my $channel = shift;
+    my %params = @_;
+    
+
+    return sub {
+	$channel->declare_queue( exclusive => $params{'exclusive'},
+				 queue => $params{'queue'},
+				 on_success => sub {
+				     my $queue = shift;
+				     $params{'obj'}->_set_queue($queue);
+				     $params{'obj'}->_set_channel($channel);
+				     $params{'cv'}->send(1);
+				 },
+				 on_failure => sub {
+				     $params{'cv'}->send(0);
+				 });
+    };
 }
 
 
