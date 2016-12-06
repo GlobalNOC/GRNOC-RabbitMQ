@@ -14,8 +14,8 @@ use warnings;
 
 package GRNOC::RabbitMQ::Client;
 
-use AnyEvent::RabbitMQ;
 use AnyEvent;
+use GRNOC::RabbitMQ;
 use Data::UUID;
 use GRNOC::Log;
 use JSON::XS;
@@ -89,6 +89,11 @@ sub new{
 		 queue => undef,
 		 topic => undef,
 		 exchange => '',
+		 on_success => \&GRNOC::RabbitMQ::channel_creator,
+                 on_failure => \&GRNOC::RabbitMQ::on_failure_handler,
+                 on_read_failure => \&GRNOC::RabbitMQ::on_failure_handler,
+                 on_return => \&GRNOC::RabbitMQ::on_failure_handler,
+                 on_close => \&GRNOC::RabbitMQ::on_close_handler,
 		 @_ );
 
     my $self = \%args;
@@ -110,10 +115,8 @@ sub _connect{
 
     $self->{'logger'}->debug("Connecting to RabbitMQ");
 
-    my $cv = AnyEvent->condvar;
-    my $rabbit_mq;
 
-    my $ar = AnyEvent::RabbitMQ->new->load_xml_spec()->connect(
+    my $ar = GRNOC::RabbitMQ::connect_to_rabbit(
 	host => $self->{'host'},
 	port => $self->{'port'},
 	user => $self->{'user'},
@@ -121,79 +124,75 @@ sub _connect{
 	vhost => $self->{'vhost'},
 	timeout => $self->{'timeout'},
 	tls => 0,
-	on_success => sub {
-	    my $r = shift;
-	    $r->open_channel(
-		on_success => sub {
-		    my $channel = shift;
-		    $rabbit_mq = $channel;
-		    $channel->declare_exchange(
-			exchange   => $self->{'exchange'},
-			type => 'topic',
-			on_success => sub {
-			    $cv->send();
-			},
-			on_failure => $cv,
-			);
-		},
-		on_failure => $cv,
-		on_close   => sub {
-		    $self->{'logger'}->error("Disconnected from RabbitMQ!");
-		},
-		);
-	},
-	on_failure => $cv,
-	on_read_failure => sub { die @_ },
-	on_return  => sub {
-	    my $frame = shift;
-	    die "Unable to deliver ", Data::Dumper::Dumper($frame);
-	},
-	on_close   => sub {
-	    my $why = shift;
-	    if (ref($why)) {
-		my $method_frame = $why->method_frame;
-		die $method_frame->reply_code, ": ", $method_frame->reply_text;
-	    }
-	    else {
-		die $why;
-	    }
-	}
-	);
-    
-    #synchronize
-    $cv->recv();
+        exchange => $self->{'exchange'},
+        type => 'topic',
+        obj => $self,
+        exclusive => 1,
+        queue => undef,
+	on_success => $self->{'on_success'},
+	on_failure => $self->{'on_failure'},
+	on_read_failure => $self->{'on_read_failure'},
+	on_return => $self->{'on_return'},
+	on_close => $self->{'on_close'}
+        );
+
+    if(!defined($ar)){
+        warn "Unable to connect to rabbit\n";
+        return;
+    }
+
+    $self->{'connected_to_rabbit'} = 1;
 
     $self->{'logger'}->debug("Connected to Rabbit");
 
-    $cv = AnyEvent->condvar;
+    my $cv = AnyEvent->condvar;
 
     $self->{'ar'} = $ar;
-    $self->{'rabbit_mq'} = $rabbit_mq;
-    $self->{'rabbit_mq'}->declare_queue( exclusive => 1,
-					 on_success => sub {
-					     my $queue = shift;
-					     $self->{'rabbit_mq'}->bind_queue( exchange => $self->{'exchange'},
-									       queue => $queue->{method_frame}->{queue},
-									       routing_key => $queue->{method_frame}->{queue},
-									       on_success => sub {
-										   $cv->send($queue->{method_frame}->{queue});
-									       });
-					 });
     
+    $self->{'rabbit_mq'}->bind_queue( exchange => $self->{'exchange'},
+				      queue => $self->{'rabbit_mq_queue'}->{method_frame}->{queue},
+				      routing_key => $self->{'rabbit_mq_queue'}->{method_frame}->{queue},
+				      on_success => sub {
+					  $cv->send($self->{'rabbit_mq_queue'}->{method_frame}->{queue});
+				      });
+
     my $cbq = $cv->recv();
-    $self->{'callback_queue'} = $cbq;
+    $self->{'callback_queue'} = $self->{'rabbit_mq_queue'}->{method_frame}->{queue};
 
     $self->{'rabbit_mq'}->consume(
-                                  no_ack => 1,
-                                  on_consume => $self->on_response_cb()
+	no_ack => 1,
+	on_consume => $self->on_response_cb()
 	);
     
-    return;
+}
+
+sub stop_consuming{
+
 }
 
 sub _generate_uuid{
     my $self = shift;
     return $self->{'uuid'}->to_string($self->{'uuid'}->create());
+}
+
+=head2 _set_channel
+
+=cut
+
+sub _set_channel{
+    my $self = shift;
+    my $channel = shift;
+    $self->{'rabbit_mq'} = $channel;
+}
+
+=head2 _set_queue
+
+=cut
+
+sub _set_queue{
+    my $self = shift;
+    my $queue = shift;
+    $self->{'rabbit_mq_queue'} = $queue;
 }
 
 =head2 on_response_cb

@@ -14,9 +14,9 @@ use warnings;
 
 package GRNOC::RabbitMQ::Dispatcher;
 
-use AnyEvent::RabbitMQ;
 use AnyEvent;
 use GRNOC::Log;
+use GRNOC::RabbitMQ;
 
 =head1 NAME
 
@@ -88,6 +88,11 @@ sub new{
 	timeout => 1,
 	queue => undef,
 	exchange => '',
+	on_success => \&GRNOC::RabbitMQ::channel_creator,
+	on_failure => \&GRNOC::RabbitMQ::on_failure_handler,
+	on_read_failure => \&GRNOC::RabbitMQ::on_failure_handler,
+	on_return => \&GRNOC::RabbitMQ::on_failure_handler,
+	on_close => \&GRNOC::RabbitMQ::on_close_handler,
 	@_,
 	);
 
@@ -102,6 +107,7 @@ sub new{
 	$self->{'logger'}->error("No topic defined!!!");
 	return;
     }
+    $self->{'connected_to_rabbit'} = 0;
     $self->_connect_to_rabbit();
 
     #--- register the help method
@@ -130,10 +136,7 @@ sub _connect_to_rabbit{
 
     $self->{'logger'}->debug("Connecting to RabbitMQ");
 
-    my $cv = AnyEvent->condvar;
-    my $rabbit_mq;
-
-    my $ar = AnyEvent::RabbitMQ->new->load_xml_spec()->connect(
+    my $ar = GRNOC::RabbitMQ::connect_to_rabbit(
 	host => $self->{'host'},
 	port => $self->{'port'},
 	user => $self->{'user'},
@@ -141,67 +144,30 @@ sub _connect_to_rabbit{
 	vhost => $self->{'vhost'},
 	timeout => $self->{'timeout'},
 	tls => 0,
-	on_success => sub {
-	    my $r = shift;
-	        $r->open_channel(
-		    on_success => sub {
-			my $channel = shift;
-			$rabbit_mq = $channel;
-			    $channel->declare_exchange(
-				exchange   => $self->{'exchange'},
-				type => 'topic',
-				on_success => sub {
-				    $cv->send();
-				},
-				on_failure => $cv,
-				);
-		    },
-		    on_failure => $cv,
-		    on_close   => sub {
-			$self->{'logger'}->error("Disconnected from RabbitMQ!");
-		    },
-		    );
-	},
-	on_failure => $cv,
-	on_read_failure => sub { die @_ },
-	on_return  => sub {
-	    my $frame = shift;
-	    die "Unable to deliver ", Dumper($frame);
-	},
-	on_close   => sub {
-	    my $why = shift;
-	    if (ref($why)) {
-		my $method_frame = $why->method_frame;
-		die $method_frame->reply_code, ": ", $method_frame->reply_text;
-	    }
-	    else {
-		die $why;
-	    }
-	}
+	exchange => $self->{'exchange'},
+	type => 'topic',
+	obj => $self,
+	exclusive => 0,
+	queue => $self->{'queue'},
+        on_success => $self->{'on_success'},
+        on_failure => $self->{'on_failure'},
+        on_read_failure => $self->{'on_read_failure'},
+        on_return => $self->{'on_return'},
+        on_close => $self->{'on_close'}
 	);
-    
-    #synchronize
-    $cv->recv();
 
-    $self->{'ar'} = $ar;
-    $self->{'rabbit_mq'} = $rabbit_mq;
-
-    if(!defined($rabbit_mq)){
-	die "unable to connect to RabbitMQ";
+    if(!defined($ar)){
+	warn "Unable to connect to rabbit\n";
+	return;
     }
 
-    $cv = AnyEvent->condvar;
+    $self->{'connected_to_rabbit'} = 1;
     
-    $self->{'rabbit_mq'}->declare_queue( queue => $self->{'queue'}, 
-					 on_success => sub {
-					     my $queue = shift;
-					     $cv->send($queue);
-					 });
-    my $queue = $cv->recv();
-    $self->{'rabbit_mq_queue'} = $queue;
+
+    $self->{'ar'} = $ar;
 
     my $dispatcher = $self;
-    $self->{'rabbit_mq'}->consume( queue => $queue->{method_frame}->{queue},
+    $self->{'rabbit_mq'}->consume( queue => $self->{'rabbit_mq_queue'}->{method_frame}->{queue},
                                    on_consume => sub {
                                        my $message = shift;
                                        $dispatcher->handle_request($message);
@@ -211,6 +177,25 @@ sub _connect_to_rabbit{
 
 }
 
+=head2 _set_channel
+
+=cut
+
+sub _set_channel{
+    my $self = shift;
+    my $channel = shift;
+    $self->{'rabbit_mq'} = $channel;
+}
+
+=head2 _set_queue
+
+=cut
+
+sub _set_queue{
+    my $self = shift;
+    my $queue = shift;
+    $self->{'rabbit_mq_queue'} = $queue;
+}
 
 =head2 help()
 returns list of avail methods or if parameter 'method_name' provided, the details about that method
@@ -409,6 +394,7 @@ sub register_method{
     $method_ref->set_dispatcher($self);
 
     my $cv = AnyEvent->condvar;
+
     $self->{'rabbit_mq'}->bind_queue( queue => $self->{'rabbit_mq_queue'}->{method_frame}->{queue},
 				      exchange => $self->{'exchange'},
 				      routing_key => $method_ref->get_name(),
@@ -421,6 +407,15 @@ sub register_method{
     return 1;
 }
 
+=head2 is_consuming
+
+=cut
+
+sub is_consuming{
+    my $self = shift;
+    return $self->{'is_consuming'};
+}
+
 =head2 start_consuming
 
 please note that start_consuming will block forever in your application
@@ -429,9 +424,19 @@ please note that start_consuming will block forever in your application
 
 sub start_consuming{
     my $self = shift;
-    my $state = shift;
-    $self->{'state'} = $state;
-    AnyEvent->condvar->recv;
+    $self->{'is_consuming'} = 1;    
+    $self->{'consuming_condvar'} = AnyEvent->condvar;
+    $self->{'consuming_condvar'}->recv();
+}
+
+=head2 stop_consuming
+
+=cut
+
+sub stop_consuming{
+    my $self = shift;
+    $self->{'is_consuming'} = 0;
+    $self->{'consuming_condvar'}->send();
 }
 
 1;
