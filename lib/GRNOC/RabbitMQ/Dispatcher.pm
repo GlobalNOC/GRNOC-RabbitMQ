@@ -163,7 +163,6 @@ sub _connect_to_rabbit{
 
     $self->{'connected_to_rabbit'} = 1;
     
-    warn "Success connecting to rabbit\n";
 
     $self->{'ar'} = $ar;
 
@@ -396,7 +395,6 @@ sub register_method{
 
     my $cv = AnyEvent->condvar;
 
-    warn Data::Dumper::Dumper($self->{'rabbit_mq_queue'});
     $self->{'rabbit_mq'}->bind_queue( queue => $self->{'rabbit_mq_queue'}->{method_frame}->{queue},
 				      exchange => $self->{'exchange'},
 				      routing_key => $method_ref->get_name(),
