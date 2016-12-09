@@ -92,9 +92,9 @@ sub connect_to_rabbit{
     my $status = $cv->recv();
     
     if(!$status){
-	return;
-    }
-
+        return;
+        }
+    
     return $ar;
 }
 
@@ -109,10 +109,21 @@ sub on_close_handler{
     my %params = @_;
 
     return sub {
-	my $obj = $params{'obj'};
-	if($obj->is_consuming()){
-	    $obj->stop_consuming();
-	}
+        my $obj = $params{'obj'};
+        if($obj->consuming()){
+            $obj->stop_consuming();
+        }
+    };
+
+}
+
+sub on_client_close_handler{
+    my %params = @_;
+
+    return sub {
+        my $obj = $params{'obj'};
+
+        $obj->connected(0);
     };
 
 }
