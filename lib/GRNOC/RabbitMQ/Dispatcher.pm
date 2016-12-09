@@ -78,50 +78,50 @@ sub new{
     my $class =ref($that) || $that;
     
     my %args = (
-	debug                => 0,
-	topic => undef,
-	host => 'localhost',
-	port => 5672,
-	user => undef,
-	pass => undef,
-	vhost => '/',
-	timeout => 1,
-	queue => undef,
-	exchange => '',
-	on_success => \&GRNOC::RabbitMQ::channel_creator,
-	on_failure => \&GRNOC::RabbitMQ::on_failure_handler,
-	on_read_failure => \&GRNOC::RabbitMQ::on_failure_handler,
-	on_return => \&GRNOC::RabbitMQ::on_failure_handler,
-	on_close => \&GRNOC::RabbitMQ::on_close_handler,
-	@_,
-	);
-
+        debug                => 0,
+        topic => undef,
+        host => 'localhost',
+        port => 5672,
+        user => undef,
+        pass => undef,
+        vhost => '/',
+        timeout => 1,
+        queue => undef,
+        exchange => '',
+        on_success => \&GRNOC::RabbitMQ::channel_creator,
+        on_failure => \&GRNOC::RabbitMQ::on_failure_handler,
+        on_read_failure => \&GRNOC::RabbitMQ::on_failure_handler,
+        on_return => \&GRNOC::RabbitMQ::on_failure_handler,
+        on_close => \&GRNOC::RabbitMQ::on_close_handler,
+        @_,
+        );
+    
     my $self = \%args;
-
+    
     #--- register builtin help method
     bless $self,$class;
-
+    
     $self->{'logger'} = GRNOC::Log->get_logger();
-
+    
     if(!defined($self->{'topic'})){
-	$self->{'logger'}->error("No topic defined!!!");
-	return;
+        $self->{'logger'}->error("No topic defined!!!");
+        return;
     }
-    $self->{'connected_to_rabbit'} = 0;
+    $self->connected(0);
     $self->_connect_to_rabbit();
-
+    
     #--- register the help method
     my $help_method = GRNOC::RabbitMQ::Method->new(
-	name         => "help",
-	description  => "The help method!",
-	is_default   => 1,
-	callback     => \&help,
-	);
-
+        name         => "help",
+        description  => "The help method!",
+        is_default   => 1,
+        callback     => \&help,
+        );
+    
     $help_method->set_schema_validator(
-	schema => { 'type' => 'object',
-		    'properties' => { "method_name" => {'type' => 'string'} }}
-	);
+        schema => { 'type' => 'object',
+                    'properties' => { "method_name" => {'type' => 'string'} }}
+        );
     
     $self->register_method($help_method);
     
@@ -133,37 +133,37 @@ sub new{
 sub _connect_to_rabbit{
     
     my $self = shift;
-
+    
     $self->{'logger'}->debug("Connecting to RabbitMQ");
-
+    
     my $ar = GRNOC::RabbitMQ::connect_to_rabbit(
-	host => $self->{'host'},
-	port => $self->{'port'},
-	user => $self->{'user'},
-	pass => $self->{'pass'},
-	vhost => $self->{'vhost'},
-	timeout => $self->{'timeout'},
-	tls => 0,
-	exchange => $self->{'exchange'},
-	type => 'topic',
-	obj => $self,
-	exclusive => 0,
-	queue => $self->{'queue'},
+        host => $self->{'host'},
+        port => $self->{'port'},
+        user => $self->{'user'},
+        pass => $self->{'pass'},
+        vhost => $self->{'vhost'},
+        timeout => $self->{'timeout'},
+        tls => 0,
+        exchange => $self->{'exchange'},
+        type => 'topic',
+        obj => $self,
+        exclusive => 0,
+        queue => $self->{'queue'},
         on_success => $self->{'on_success'},
         on_failure => $self->{'on_failure'},
         on_read_failure => $self->{'on_read_failure'},
         on_return => $self->{'on_return'},
         on_close => $self->{'on_close'}
-	);
-
-    if(!defined($ar)){
-	warn "Unable to connect to rabbit\n";
-	return;
-    }
-
-    $self->{'connected_to_rabbit'} = 1;
+        );
     
-
+    if(!defined($ar)){
+        warn "Unable to connect to rabbit\n";
+        return;
+    }
+    
+    $self->connected(1);
+    
+    
     $self->{'ar'} = $ar;
 
     my $dispatcher = $self;
@@ -174,7 +174,7 @@ sub _connect_to_rabbit{
                                    });
     
     return;
-
+    
 }
 
 =head2 _set_channel
@@ -407,12 +407,27 @@ sub register_method{
     return 1;
 }
 
-=head2 is_consuming
+=head2 connected
 
 =cut
 
-sub is_consuming{
-    my $self = shift;
+sub connected {
+    my ($self, $connected) = @_;
+
+    $self->{'connected_to_rabbit'} = $connected if(defined($connected));
+    
+    return $self->{'connected_to_rabbit'};
+}
+
+=head2 consuming
+
+=cut
+
+sub consuming{
+    my ($self, $consuming) = @_;
+
+    $self->{'is_consuming'} = $consuming if(defined($consuming));
+
     return $self->{'is_consuming'};
 }
 
@@ -424,7 +439,7 @@ please note that start_consuming will block forever in your application
 
 sub start_consuming{
     my $self = shift;
-    $self->{'is_consuming'} = 1;    
+    $self->consuming(1);    
     $self->{'consuming_condvar'} = AnyEvent->condvar;
     $self->{'consuming_condvar'}->recv();
 }
@@ -435,7 +450,7 @@ sub start_consuming{
 
 sub stop_consuming{
     my $self = shift;
-    $self->{'is_consuming'} = 0;
+    $self->consuming(0);
     $self->{'consuming_condvar'}->send();
 }
 

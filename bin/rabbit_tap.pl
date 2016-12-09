@@ -3,10 +3,19 @@
 use strict;
 use warnings;
 
+use Getopt::Long;
+
 use GRNOC::RabbitMQ::Dispatcher;
 use GRNOC::RabbitMQ::Method;
+use GRNOC::Config;
 use DateTime;
 use GRNOC::CLI;
+
+use Data::Dumper;
+
+my $config_file;
+
+GetOptions('config|c=s' => \$config_file);
 
 sub main{
 
@@ -14,16 +23,39 @@ sub main{
     
     $cli->clear_screen();
 
-    my $username = $cli->get_input("Username");
-    my $password = $cli->get_password("Password");
-    my $host     = $cli->get_input("Host", default => "localhost");
-    my $port     = $cli->get_input("Port", default => "5672");
-    my $vhost    = $cli->get_input("VHost", default => "/");
-    my $exchange = $cli->get_input("Exchange");
+    my ($username, $password, $host, $port, $vhost, $exchange, $topic);
+
+    if($config_file){
+        if(! -e $config_file){
+            die("Unable to find config file: $config_file");
+        }
+
+        my $config = new GRNOC::Config( config_file => $config_file, force_array => 0 );
+        $username = $config->get( '/config/username' );
+        $password = $config->get( '/config/password' );
+        $host     = $config->get( '/config/host' );
+        $port     = $config->get( '/config/port' );
+        $vhost    = $config->get( '/config/vhost' );
+        $exchange = $config->get( '/config/exchange' );
+        $topic    = $config->get( '/config/topic' );
+
+    }
+    else{
+
+        $username = $cli->get_input("Username");
+        $password = $cli->get_password("Password");
+        $host     = $cli->get_input("Host", default => "localhost");
+        $port     = $cli->get_input("Port", default => "5672");
+        $vhost    = $cli->get_input("VHost", default => "/");
+        $exchange = $cli->get_input("Exchange");
+        $topic   = $cli->get_input("Topic", default => "#");
     
-    my $topic   = $cli->get_input("Topic", default => "#");
-    
-    $cli->clear_screen();
+        $cli->clear_screen();
+    }
+
+    if(!$username || !$password || !$host || !$port || !$vhost || ! $exchange || !$topic){
+        die("Missing parameters.");
+    }
 
     my $cv = AnyEvent->condvar;
     my $rabbit_mq;
