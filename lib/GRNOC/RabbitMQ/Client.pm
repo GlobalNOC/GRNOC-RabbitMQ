@@ -76,7 +76,6 @@ main();
 =head2 new
 
 =cut
-
 sub new{
     my $class = shift;
     
@@ -168,6 +167,9 @@ sub _connect{
     return 1;
 }
 
+=head2 connected
+
+=cut
 sub connected {
     my ($self, $connected) = @_;
 
@@ -176,6 +178,9 @@ sub connected {
     return $self->{'connected_to_rabbit'};
 }
 
+=head2 auto_reconnect
+
+=cut
 sub auto_reconnect {
     my ($self, $reconnect) = @_;
 
@@ -184,11 +189,17 @@ sub auto_reconnect {
     return $self->{'auto_reconnect'};
 }
 
+=head2 stop_consuming
+
+=cut
 sub stop_consuming{
     my $self = shift;
     $self->{'is_consuming'} = 0;
 }
 
+=head2 consuming
+
+=cut
 sub consuming {
     my ($self, $consuming) = @_;
 
@@ -205,7 +216,6 @@ sub _generate_uuid{
 =head2 _set_channel
     
 =cut
-
 sub _set_channel{
     my $self = shift;
     my $channel = shift;
@@ -215,7 +225,6 @@ sub _set_channel{
 =head2 _set_queue
     
 =cut
-
 sub _set_queue{
     my $self = shift;
     my $queue = shift;
@@ -225,7 +234,6 @@ sub _set_queue{
 =head2 on_response_cb
 
 =cut
-
 sub on_response_cb {
     my $self = shift;
     return  sub {
