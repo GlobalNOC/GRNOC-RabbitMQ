@@ -4,7 +4,7 @@ use strict;
 use warnings;
 
 use Data::Dumper;
-use Test::More tests => 12;
+use Test::More tests => 11;
 
 use GRNOC::RabbitMQ::Dispatcher;
 use GRNOC::RabbitMQ::Method;
@@ -42,11 +42,6 @@ ok(defined($dispatcher), "got a dispatcher");
 #######################
 ### Client Creation
 #######################
-eval {
-    my $bad_client = GRNOC::RabbitMQ::Client->new();
-};
-ok($@, "fatal error for invalid client");
-
 my $client = GRNOC::RabbitMQ::Client->new(
     topic => "Test.Data",
     exchange => "Test",
