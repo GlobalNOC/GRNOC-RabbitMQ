@@ -3,8 +3,7 @@ lib/GRNOC/RabbitMQ/Client.pm
 lib/GRNOC/RabbitMQ/Dispatcher.pm
 lib/GRNOC/RabbitMQ/Method.pm
 Makefile.PL
-MANIFEST			This list of files
-perl-GRNOC-RabbitMQ-1.0.0.tar.gz
+MANIFEST
 perl-GRNOC-RabbitMQ.spec
 t/pod.t
 t/pod_coverage.t

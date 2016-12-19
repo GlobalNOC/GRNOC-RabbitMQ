@@ -53,6 +53,10 @@ use AnyEvent::RabbitMQ;
 
 our $VERSION = '1.0.0';
 
+
+=head2 connect_to_rabbit
+
+=cut
 sub connect_to_rabbit{
     my %args = ( host => 'localhost',
 		 port => 5672,
@@ -98,6 +102,9 @@ sub connect_to_rabbit{
     return $ar;
 }
 
+=head2 on_read_failure
+
+=cut
 sub on_read_failure{
     return sub {
 	
@@ -105,6 +112,9 @@ sub on_read_failure{
 }
 
 
+=head2 on_close_handler
+
+=cut
 sub on_close_handler{
     my %params = @_;
 
@@ -117,6 +127,9 @@ sub on_close_handler{
 
 }
 
+=head2 on_client_close_handler
+
+=cut
 sub on_client_close_handler{
     my %params = @_;
 
@@ -128,6 +141,9 @@ sub on_client_close_handler{
 
 }
 
+=head2 on_failure_handler
+
+=cut
 sub on_failure_handler{
     my %params = @_;
 
@@ -138,6 +154,9 @@ sub on_failure_handler{
 
 }
 
+=head2 channel_creator
+
+=cut
 sub channel_creator{
     my %params = @_;
     
@@ -150,6 +169,9 @@ sub channel_creator{
     };
 }
 
+=head2 exchange_creator
+
+=cut
 sub exchange_creator{
     my %params = @_;
 
@@ -162,6 +184,9 @@ sub exchange_creator{
     };
 }
 
+=head2 queue_declare
+
+=cut
 sub queue_declare{
     my $channel = shift;
     my %params = @_;
@@ -181,6 +206,5 @@ sub queue_declare{
 				 });
     };
 }
-
 
 1;
