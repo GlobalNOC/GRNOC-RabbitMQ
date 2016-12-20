@@ -14,7 +14,7 @@ Requires: perl-GRNOC-Log
 Requires: perl-AnyEvent
 Requires: perl-AnyEvent-RabbitMQ
 Requires: perl-Devel-Cover
-Requries: perl-Event-Lib
+Requires: perl-Event-Lib
 Requires: perl-JSON-XS
 Requires: perl-JSON-Schema
 Requires: perl-autovivification

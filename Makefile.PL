@@ -8,7 +8,7 @@ rpm:    dist
 END
 
 WriteMakefile(
-    NAME                => 'GRNOC::RabbitMQ',
+    NAME                => 'perl-GRNOC-RabbitMQ',
     AUTHOR              => 'GRNOC Systems Engineering <syseng@grnoc.iu.edu>',
     VERSION_FROM        => 'lib/GRNOC/RabbitMQ.pm',
     PL_FILES            => {},
