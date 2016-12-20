@@ -13,6 +13,7 @@ BuildRequires: perl
 Requires: perl-GRNOC-Log
 Requires: perl-AnyEvent
 Requires: perl-AnyEvent-RabbitMQ
+Requires: perl-Devel-Cover
 Requires: perl-JSON-XS
 Requires: perl-JSON-Schema
 Requires: perl-autovivification
