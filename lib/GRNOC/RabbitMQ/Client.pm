@@ -88,7 +88,7 @@ sub new{
 		 timeout => 15,
 		 queue => undef,
 		 topic => undef,
-		 exchange => '',
+		 exchange => undef,
 		 on_success => \&GRNOC::RabbitMQ::channel_creator,
                  on_failure => \&GRNOC::RabbitMQ::on_failure_handler,
                  on_read_failure => \&GRNOC::RabbitMQ::on_failure_handler,
@@ -100,14 +100,36 @@ sub new{
 
     $self->{'logger'} = Log::Log4perl->get_logger('GRNOC.RabbitMQ.Client');
 
+    $self->_validate_params();
+
     $self->{'uuid'} = new Data::UUID;
     bless $self, $class;
 
     $self->{'pending_responses'} = {};
     
-    $self->_connect();
+    $self->_connect()
 
     return $self;
+}
+
+sub _validate_params{
+    my $self = shift;
+    if(!defined($self->{'user'})){
+
+    }
+
+    if(!defined($self->{'password'})){
+        
+    }
+
+    if(!defined($self->{'exchange'})){
+
+    }
+
+    if(!defined($self->{'host'})){
+        
+    }
+
 }
 
 sub _connect{
@@ -165,6 +187,10 @@ sub _connect{
 	);
     
 }
+
+=head2 stop_consuming
+
+=cut
 
 sub stop_consuming{
 

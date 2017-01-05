@@ -17,8 +17,9 @@ sub tester {
 ######################
 ### Dispatcher Creation
 ######################
+my $bad_dispatcher;
 eval {
-    my $bad_dispatcher = GRNOC::RabbitMQ::Dispatcher->new(
+    $bad_dispatcher = GRNOC::RabbitMQ::Dispatcher->new(
 	queue => "Test",
 	exchange => "Test",
 	topic => "Test.Data",
@@ -27,7 +28,7 @@ eval {
 	port => "5671"
 	);
 };
-ok($@, "fatal error for failed Rabbit connect");
+ok(!defined($bad_dispatcher), "Failure to create was ok");
 
 my $dispatcher = GRNOC::RabbitMQ::Dispatcher->new(
     queue => "Test",
@@ -42,10 +43,9 @@ ok(defined($dispatcher), "got a dispatcher");
 #######################
 ### Client Creation
 #######################
-eval {
-    my $bad_client = GRNOC::RabbitMQ::Client->new();
-};
-ok($@, "fatal error for invalid client");
+my $bad_client = GRNOC::RabbitMQ::Client->new();
+ok(defined($bad_client), "Was able to create a bad client");
+ok($bad_client->{'connected_to_rabbit'} == 0, "Not currently connected to rabbit");
 
 my $client = GRNOC::RabbitMQ::Client->new(
     topic => "Test.Data",
