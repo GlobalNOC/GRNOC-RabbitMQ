@@ -11,8 +11,8 @@ use AnyEvent;
 use GRNOC::RabbitMQ::Client;
 
 my $daemon = Proc::Daemon->new(
-    work_dir => getcwd(),
-    exec_command => 'perl listener.pl'
+    work_dir => getcwd() . "/t",
+    exec_command => 'perl -Mlib=../blib/lib/ listener.pl'
     );
 my $pid = $daemon->Init();
 

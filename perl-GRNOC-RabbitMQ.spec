@@ -1,7 +1,7 @@
 Summary: GRNOC RabbitMQ Perl Libraries
 Name: perl-GRNOC-RabbitMQ
 Version: 1.0.0
-Release: 1
+Release: 1%{?dist}
 License: APL 2.0
 Group: Network
 URL: http://globalnoc.iu.edu
@@ -13,6 +13,8 @@ BuildRequires: perl
 Requires: perl-GRNOC-Log
 Requires: perl-AnyEvent
 Requires: perl-AnyEvent-RabbitMQ
+Requires: perl-Devel-Cover
+Requires: perl-Event-Lib
 Requires: perl-JSON-XS
 Requires: perl-JSON-Schema
 Requires: perl-autovivification

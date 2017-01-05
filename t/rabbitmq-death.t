@@ -3,7 +3,8 @@
 use strict;
 use warnings;
 
-use Test::More tests => 1;
+use Data::Dumper;
+use Test::More tests => 2;
 use Cwd;
 use Proc::Daemon;
 use AnyEvent;
@@ -22,15 +23,21 @@ my $client = GRNOC::RabbitMQ::Client->new(
     topic => "Test.Data",
     exchange => "Test",
     user => "guest",
-    pass => "guest"
+    pass => "guest",
+    auto_reconnect => 1
     );
 
 system("/sbin/service rabbitmq-server stop");
 
+my $res = undef;
 eval {
-    my $res = $client->get();
+    $res = $client->get();
 };
-ok($@, "fatal error for dead Rabbit");
+ok(defined $res, "Response was defined");
+ok(defined $res->{'error'}, "Error message was defined");
+
+# TODO Create a dying Client
+# ok($@, "fatal error for dead Rabbit");
 
 $daemon->Kill_Daemon($pid);
 system("/sbin/service rabbitmq-server start");

@@ -53,10 +53,10 @@ use AnyEvent::RabbitMQ;
 
 our $VERSION = '1.0.0';
 
+
 =head2 connect_to_rabbit
 
 =cut
-
 sub connect_to_rabbit{
     my %args = ( host => 'localhost',
 		 port => 5672,
@@ -96,16 +96,15 @@ sub connect_to_rabbit{
     my $status = $cv->recv();
     
     if(!$status){
-	return;
-    }
-
+        return;
+        }
+    
     return $ar;
 }
 
-=head2 on_read_failure
+=head on_read_failure
 
 =cut
-
 sub on_read_failure{
     return sub {
 	
@@ -121,10 +120,24 @@ sub on_close_handler{
     my %params = @_;
 
     return sub {
-	my $obj = $params{'obj'};
-	if($obj->is_consuming()){
-	    $obj->stop_consuming();
-	}
+        my $obj = $params{'obj'};
+        if($obj->consuming()){
+            $obj->stop_consuming();
+        }
+    };
+
+}
+
+=head2 on_client_close_handler
+
+=cut
+sub on_client_close_handler{
+    my %params = @_;
+
+    return sub {
+        my $obj = $params{'obj'};
+
+        $obj->connected(0);
     };
 
 }
@@ -198,6 +211,5 @@ sub queue_declare{
 				 });
     };
 }
-
 
 1;

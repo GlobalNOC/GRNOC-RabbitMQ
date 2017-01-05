@@ -4,7 +4,7 @@ use strict;
 use warnings;
 
 use Data::Dumper;
-use Test::More tests => 12;
+use Test::More tests => 11;
 
 use GRNOC::RabbitMQ::Dispatcher;
 use GRNOC::RabbitMQ::Method;
@@ -43,6 +43,7 @@ ok(defined($dispatcher), "got a dispatcher");
 #######################
 ### Client Creation
 #######################
+
 my $bad_client = GRNOC::RabbitMQ::Client->new();
 ok(defined($bad_client), "Was able to create a bad client");
 ok($bad_client->{'connected_to_rabbit'} == 0, "Not currently connected to rabbit");

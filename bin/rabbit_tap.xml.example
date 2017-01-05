@@ -1,0 +1,9 @@
+<config>
+  <username></username>
+  <password></password>
+  <host>127.0.0.1</host>
+  <port>5672</port>
+  <vhost>/</vhost>
+  <exchange></exchange>
+  <topic>#</topic>
+</config>

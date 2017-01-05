@@ -76,26 +76,26 @@ main();
 =head2 new
 
 =cut
-
 sub new{
     my $class = shift;
     
     my %args = ( host => 'localhost',
-		 port => 5672,
-		 user => undef,
-		 pass => undef,
-		 vhost => '/',
-		 timeout => 15,
-		 queue => undef,
-		 topic => undef,
-		 exchange => undef,
-		 on_success => \&GRNOC::RabbitMQ::channel_creator,
+                 port => 5672,
+                 user => undef,
+                 pass => undef,
+                 vhost => '/',
+                 timeout => 15,
+                 queue => undef,
+                 topic => undef,
+                 exchange => '',
+                 auto_reconnect => 0,
+                 on_success => \&GRNOC::RabbitMQ::channel_creator,
                  on_failure => \&GRNOC::RabbitMQ::on_failure_handler,
                  on_read_failure => \&GRNOC::RabbitMQ::on_failure_handler,
                  on_return => \&GRNOC::RabbitMQ::on_failure_handler,
-                 on_close => \&GRNOC::RabbitMQ::on_close_handler,
-		 @_ );
-
+                 on_close => \&GRNOC::RabbitMQ::on_client_close_handler,
+                 @_ );
+    
     my $self = \%args;
 
     $self->{'logger'} = Log::Log4perl->get_logger('GRNOC.RabbitMQ.Client');
@@ -137,55 +137,79 @@ sub _connect{
 
     $self->{'logger'}->debug("Connecting to RabbitMQ");
 
-
     my $ar = GRNOC::RabbitMQ::connect_to_rabbit(
-	host => $self->{'host'},
-	port => $self->{'port'},
-	user => $self->{'user'},
-	pass => $self->{'pass'},
-	vhost => $self->{'vhost'},
-	timeout => $self->{'timeout'},
-	tls => 0,
+        host => $self->{'host'},
+        port => $self->{'port'},
+        user => $self->{'user'},
+        pass => $self->{'pass'},
+        vhost => $self->{'vhost'},
+        timeout => $self->{'timeout'},
+        tls => 0,
         exchange => $self->{'exchange'},
         type => 'topic',
         obj => $self,
         exclusive => 1,
         queue => undef,
-	on_success => $self->{'on_success'},
-	on_failure => $self->{'on_failure'},
-	on_read_failure => $self->{'on_read_failure'},
-	on_return => $self->{'on_return'},
-	on_close => $self->{'on_close'}
+        on_success => $self->{'on_success'},
+        on_failure => $self->{'on_failure'},
+        on_read_failure => $self->{'on_read_failure'},
+        on_return => $self->{'on_return'},
+        on_close => $self->{'on_close'}
         );
 
     if(!defined($ar)){
-        warn "Unable to connect to rabbit\n";
+        $self->{'logger'}->error("Unable to connect to RabbitMQ.");
         return;
     }
 
-    $self->{'connected_to_rabbit'} = 1;
+    $self->{'ar'} = $ar;
 
+    $self->connected(1);
     $self->{'logger'}->debug("Connected to Rabbit");
 
     my $cv = AnyEvent->condvar;
 
-    $self->{'ar'} = $ar;
-    
     $self->{'rabbit_mq'}->bind_queue( exchange => $self->{'exchange'},
-				      queue => $self->{'rabbit_mq_queue'}->{method_frame}->{queue},
-				      routing_key => $self->{'rabbit_mq_queue'}->{method_frame}->{queue},
-				      on_success => sub {
-					  $cv->send($self->{'rabbit_mq_queue'}->{method_frame}->{queue});
-				      });
-
+                                      queue => $self->{'rabbit_mq_queue'}->{method_frame}->{queue},
+                                      routing_key => $self->{'rabbit_mq_queue'}->{method_frame}->{queue},
+                                      on_success => sub {
+                                          $cv->send($self->{'rabbit_mq_queue'}->{method_frame}->{queue});
+                                      });
+    
     my $cbq = $cv->recv();
     $self->{'callback_queue'} = $self->{'rabbit_mq_queue'}->{method_frame}->{queue};
+    
+    $self->consuming(1);
 
     $self->{'rabbit_mq'}->consume(
-	no_ack => 1,
-	on_consume => $self->on_response_cb()
-	);
-    
+        no_ack => 1,
+        on_consume => $self->on_response_cb()
+        );
+
+    return 1;
+}
+
+=head2 connected
+
+=cut
+sub connected {
+    my ($self, $connected) = @_;
+
+    $self->{'connected_to_rabbit'} = $connected if(defined($connected));
+
+    return $self->{'connected_to_rabbit'};
+}
+
+
+=head2 auto_reconnect
+
+=cut
+sub auto_reconnect {
+    my ($self, $reconnect) = @_;
+
+    $self->{'auto_reconnect'} = $reconnect if(defined($reconnect));
+
+    return $self->{'auto_reconnect'};
 }
 
 =head2 stop_consuming
@@ -193,7 +217,19 @@ sub _connect{
 =cut
 
 sub stop_consuming{
+    my $self = shift;
+    $self->{'is_consuming'} = 0;
+}
 
+=head2 consuming
+
+=cut
+sub consuming {
+    my ($self, $consuming) = @_;
+
+    $self->{'is_consuming'} = $consuming if(defined($consuming));
+
+    return $self->{'is_consuming'};
 }
 
 sub _generate_uuid{
@@ -202,9 +238,8 @@ sub _generate_uuid{
 }
 
 =head2 _set_channel
-
+    
 =cut
-
 sub _set_channel{
     my $self = shift;
     my $channel = shift;
@@ -212,9 +247,8 @@ sub _set_channel{
 }
 
 =head2 _set_queue
-
+    
 =cut
-
 sub _set_queue{
     my $self = shift;
     my $queue = shift;
@@ -224,23 +258,22 @@ sub _set_queue{
 =head2 on_response_cb
 
 =cut
-
 sub on_response_cb {
     my $self = shift;
     return  sub {
-	my $var = shift;
-	my $body = $var->{body}->{payload};
+        my $var = shift;
+        my $body = $var->{body}->{payload};
         
-	my $end = [gettimeofday];
-
+        my $end = [gettimeofday];
+        
         $self->{'logger'}->debug("on_response_cb callback args: " . Data::Dumper::Dumper($var));
-
+        
         $self->{'logger'}->debug("Pending Responses: " . Data::Dumper::Dumper($self->{'pending_responses'}));
         
         my $corr_id = $var->{header}->{correlation_id};
         if (defined $self->{'pending_responses'}->{$corr_id}) {
             $self->{'logger'}->debug("on_response_db callback result: " . $body);
-	    $self->{'logger'}->debug("total time: " . tv_interval( $self->{'pending_responses'}->{$corr_id}->{'start'}, $end));
+            $self->{'logger'}->debug("total time: " . tv_interval( $self->{'pending_responses'}->{$corr_id}->{'start'}, $end));
             $self->{'pending_responses'}->{$corr_id}->{'cb'}(decode_json($body));
             delete $self->{'pending_responses'}->{$corr_id};
         } else {
@@ -251,33 +284,52 @@ sub on_response_cb {
 
 sub AUTOLOAD{
     my $self = shift;
+    
+    if(!$self->connected()){
+        $self->{'logger'}->debug("Not connected to rabbit.");
 
+        if($self->auto_reconnect()){
+            $self->{'logger'}->debug("Attempting to reconnect to Rabbit.");
+
+            #--- try to reconnect, error out if we can't
+            my $res = $self->_connect();
+
+            if(!$res){
+                return;
+            }
+        }
+        else{
+            $self->{'logger'}->debug('Auto Reconnect disabled. Returning.');
+            return;
+        }
+    }
+    
     my $name = our $AUTOLOAD;
-
+    
     my @stuff = split('::', $name);
     $name = pop(@stuff);
     $self->{'logger'}->debug("Running name: " . $name . "\n");
     $self->{'logger'}->debug("Params: " . Data::Dumper::Dumper(@_));
     my $params = {
-	@_
+        @_
     };
-
+    
     if(defined($params->{'no_reply'}) && $params->{'no_reply'} == 1){
-	delete $params->{'no_reply'};
-	$self->{'rabbit_mq'}->publish(
-	    exchange => $self->{'exchange'},
-	    routing_key => $self->{'topic'} . "." . $name,
-	    header => {
-		no_reply => 1,
-	    },
-	    body => encode_json($params)
-	    );
-	return;
+        delete $params->{'no_reply'};
+        $self->{'rabbit_mq'}->publish(
+            exchange => $self->{'exchange'},
+            routing_key => $self->{'topic'} . "." . $name,
+            header => {
+                no_reply => 1,
+            },
+            body => encode_json($params)
+            );
+        return 1;
     }else{
-	delete $params->{'no_reply'};
+        delete $params->{'no_reply'};
         my $do_async = 0;
         my $cv = AnyEvent->condvar;
-
+        
         my $callback = sub { my $results = shift; $cv->send($results)};
         if(defined($params->{'async_callback'})){
             $callback = $params->{'async_callback'};
@@ -285,23 +337,23 @@ sub AUTOLOAD{
             $do_async = 1;
         }
         
-	my $corr_id = $self->_generate_uuid();
+        my $corr_id = $self->_generate_uuid();
         $self->{'pending_responses'}->{$corr_id}{'cb'} = $callback;
-	$self->{'pending_responses'}->{$corr_id}{'start'} = [gettimeofday];
-
+        $self->{'pending_responses'}->{$corr_id}{'start'} = [gettimeofday];
+        
         $self->{'logger'}->debug("Correlation ID: " . $corr_id);
         
-	$self->{'rabbit_mq'}->publish(
-	    exchange => $self->{'exchange'},
-	    routing_key => $self->{'topic'} . "." . $name,
-	    header => {
-		reply_to => $self->{'callback_queue'},
-		correlation_id => $corr_id,
-	    },
-	    body => encode_json($params)
-	    );
-
-
+        $self->{'rabbit_mq'}->publish(
+            exchange => $self->{'exchange'},
+            routing_key => $self->{'topic'} . "." . $name,
+            header => {
+                reply_to => $self->{'callback_queue'},
+                correlation_id => $corr_id,
+            },
+            body => encode_json($params)
+            );
+        
+        
         my $timeout;
         $timeout = AnyEvent->timer( after => $self->{'timeout'}, 
                                     cb => sub{
@@ -311,18 +363,18 @@ sub AUTOLOAD{
                                         my $cb = $self->{'pending_responses'}->{$corr_id}{'cb'};
                                         # deleting the pending response before calling back ensures $cb is only called once
                                         delete $self->{'pending_responses'}->{$corr_id};
-
+                                        
                                         my $err = {error => "Timeout occured waiting for response"};
                                         if($do_async){
                                             &$cb($err);
                                         }else{
                                             $cv->send($err);
                                         }
-
+                                        
                                         # needed to keep $timeout from being GCed before the timer fires
                                         undef $timeout;
                                     });
-
+        
         if(!$do_async){
             my $res = $cv->recv();
             return $res;
