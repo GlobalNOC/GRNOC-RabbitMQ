@@ -12,7 +12,7 @@ BuildArch:noarch
 BuildRequires: perl
 Requires: perl-GRNOC-Log
 Requires: perl-AnyEvent
-Requires: perl-AnyEvent-RabbitMQ
+Requires: perl-AnyEvent-RabbitMQ = 1.19a
 Requires: perl-Devel-Cover
 Requires: perl-Event-Lib
 Requires: perl-JSON-XS
