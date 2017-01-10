@@ -12,7 +12,7 @@ BuildArch:noarch
 BuildRequires: perl
 Requires: perl-GRNOC-Log
 Requires: perl-AnyEvent
-Requires: perl-AnyEvent-RabbitMQ
+Requires: perl-AnyEvent-RabbitMQ = 1.19.1
 Requires: perl-Devel-Cover
 Requires: perl-Event-Lib
 Requires: perl-JSON-XS
@@ -21,6 +21,7 @@ Requires: perl-autovivification
 Requires: perl(GRNOC::WebService::Regex)
 Requires: perl-Proc-Daemon
 Requires: uuid-perl
+Requires: perl-Moo
 
 %description
 The GRNOC::RabbitMQ collection is a set of perl modules which are used to
