@@ -17,6 +17,7 @@ package GRNOC::RabbitMQ::Dispatcher;
 use AnyEvent;
 use GRNOC::Log;
 use GRNOC::RabbitMQ;
+use Moo;
 
 =head1 NAME
 
@@ -73,43 +74,77 @@ main();
 
 =cut
 
-sub new{
-    my $that  = shift;
-    my $class =ref($that) || $that;
+=head2 BUILD
+
+=head2 Constructor Arguments / Attributes
+=item port
+=item user
+=item pass
+=item host
+=item vhost
+=item timeout
+=item queue_name
+=item topic
+=item exchange
+=item auto_reconnect
+=item on_success
+=item on_failure
+=item on_read_failure
+=item on_return
+=item on_close
+
+=head2 Internal Objects
+=item logger
+=item connected
+=item channel
+=item queue
+=item consuming
+=item consuming_condvar
+=item ar
+=item state
+
+=cut
+
+has port => (is => 'rwp', default => 5672, documentation => "Port to connect to RabbitMQ server", required => 1);
+has user => (is => 'rwp', default => 'guest', required => 1);
+has pass => (is => 'rwp', required => 1);
+has host => (is => 'rwp', default => 'localhost', required => 1);
+has vhost => (is => 'rwp', default => '/', required => 1);
+has timeout => (is => 'rwp', default => 15, required => 1);
+has queue_name => (is => 'rwp', required => 0);
+has topic => (is => 'rwp', required => 1);
+has exchange => (is => 'rwp', required => 1);
+has auto_reconnect => (is => 'rw', default => 0);
+has on_success => (is => 'rwp', default => sub { return \&GRNOC::RabbitMQ::channel_creator }, required => 1);
+has on_failure => (is => 'rwp', default => sub { return \&GRNOC::RabbitMQ::on_failure_handler}, required => 1);
+has on_read_failure => (is => 'rwp', default => sub { return \&GRNOC::RabbitMQ::on_failure_handler}, required => 1);
+has on_return => (is => 'rwp', default => sub { return \&GRNOC::RabbitMQ::on_failure_handler}, required => 1);
+has on_close => (is => 'rwp', default => sub { return \&GRNOC::RabbitMQ::on_client_close_handler}, required => 1);
+
+has logger => (is => 'rwp');
+
+has ar => (is => 'rwp');
+has connected => (is => 'rwp');
+has channel => (is => 'rwp');
+has queue => (is => 'rwp');
+has consuming => (is => 'rwp');
+has methods => (is => 'rwp', default => sub { return {} });
+has consuming_condvar => (is => 'rwp');
+has state => (is => 'rwp');
+
+sub BUILD{
+    my ($self) = @_;
     
-    my %args = (
-        debug                => 0,
-        topic => undef,
-        host => 'localhost',
-        port => 5672,
-        user => undef,
-        pass => undef,
-        vhost => '/',
-        timeout => 1,
-        queue => undef,
-        exchange => '',
-        on_success => \&GRNOC::RabbitMQ::channel_creator,
-        on_failure => \&GRNOC::RabbitMQ::on_failure_handler,
-        on_read_failure => \&GRNOC::RabbitMQ::on_failure_handler,
-        on_return => \&GRNOC::RabbitMQ::on_failure_handler,
-        on_close => \&GRNOC::RabbitMQ::on_close_handler,
-        @_,
-        );
     
-    my $self = \%args;
+    $self->_set_logger(GRNOC::Log->get_logger("GRNOC::RabbitMQ::Dispatcher"));
+
+    $self->logger->error("Dispatcher connecting to RabbitMQ");
     
-    #--- register builtin help method
-    bless $self,$class;
-    
-    $self->{'logger'} = GRNOC::Log->get_logger();
-    
-    if(!defined($self->{'topic'})){
-        $self->{'logger'}->error("No topic defined!!!");
-        return;
-    }
-    $self->connected(0);
+    $self->_set_connected(0);
     $self->_connect_to_rabbit();
-    
+
+    $self->logger->error("Connected: " . $self->connected);
+
     #--- register the help method
     my $help_method = GRNOC::RabbitMQ::Method->new(
         name         => "help",
@@ -134,67 +169,42 @@ sub _connect_to_rabbit{
     
     my $self = shift;
     
-    $self->{'logger'}->debug("Connecting to RabbitMQ");
+    $self->logger->error("Connecting to RabbitMQ");
     
     my $ar = GRNOC::RabbitMQ::connect_to_rabbit(
-        host => $self->{'host'},
-        port => $self->{'port'},
-        user => $self->{'user'},
-        pass => $self->{'pass'},
-        vhost => $self->{'vhost'},
-        timeout => $self->{'timeout'},
+        host => $self->host,
+        port => $self->port,
+        user => $self->user,
+        pass => $self->pass,
+        vhost => $self->vhost,
+        timeout => $self->timeout,
         tls => 0,
-        exchange => $self->{'exchange'},
+        exchange => $self->exchange,
         type => 'topic',
         obj => $self,
         exclusive => 0,
-        queue => $self->{'queue'},
-        on_success => $self->{'on_success'},
-        on_failure => $self->{'on_failure'},
-        on_read_failure => $self->{'on_read_failure'},
-        on_return => $self->{'on_return'},
-        on_close => $self->{'on_close'}
+        queue => $self->queue_name,
+        on_success => $self->on_success,
+        on_failure => $self->on_failure,
+        on_read_failure => $self->on_read_failure,
+        on_return => $self->on_return,
+        on_close => $self->on_close
         );
     
-    if(!defined($ar)){
-        warn "Unable to connect to rabbit\n";
+    $self->_set_ar($ar);
+
+    if(!$self->connected){
+        $self->logger->error("Unable to connect to RabbitMQ");
         return;
     }
-    
-    $self->connected(1);
-    
-    
-    $self->{'ar'} = $ar;
 
     my $dispatcher = $self;
-    $self->{'rabbit_mq'}->consume( queue => $self->{'rabbit_mq_queue'}->{method_frame}->{queue},
-                                   on_consume => sub {
-                                       my $message = shift;
-                                       $dispatcher->handle_request($message);
-                                   });
+    $self->channel->consume( queue => $self->queue,
+                             on_consume => sub {
+                                 my $message = shift;
+                                 $dispatcher->handle_request($message);
+                             });
     
-    return;
-    
-}
-
-=head2 _set_channel
-
-=cut
-
-sub _set_channel{
-    my $self = shift;
-    my $channel = shift;
-    $self->{'rabbit_mq'} = $channel;
-}
-
-=head2 _set_queue
-
-=cut
-
-sub _set_queue{
-    my $self = shift;
-    my $queue = shift;
-    $self->{'rabbit_mq_queue'} = $queue;
 }
 
 =head2 help()
@@ -208,6 +218,8 @@ sub help{
 
     my $method_name = $params->{'method_name'}{'value'};
     my $dispatcher = $m_ref->get_dispatcher();
+
+    $dispatcher->logger->error("WHAT");
 
     if (!defined $method_name) {
 	return $dispatcher->get_method_list();
@@ -229,7 +241,7 @@ sub help{
 sub _return_error{
     my $self        = shift;
     my $reply_to    = shift;
-    my $rabbit_mq_connection = $self->{'rabbit_mq'};
+    my $rabbit_mq_connection = $self->channel;
 
     my %error;
 
@@ -260,23 +272,22 @@ sub handle_request{
     my $self = shift;
     my $var = shift;
 
-    my $state = $self->{'state'};
+    my $state = $self->state;
     my $reply_to = {};
+
+
     if(defined($var->{'header'}->{'no_reply'}) && $var->{'header'}->{'no_reply'} == 1){
 
-	$self->{'logger'}->debug("No Reply specified");
+	$self->logger->debug("No Reply specified");
 	
     }else{
-	$self->{'logger'}->debug("Has reply specified");
+	$self->logger->debug("Has reply specified");
 	$reply_to->{'exchange'} = $var->{'deliver'}->{'method_frame'}->{'exchange'};
 	$reply_to->{'correlation_id'} = $var->{'header'}->{'correlation_id'},
 	$reply_to->{'routing_key'} = $var->{'header'}->{'reply_to'};
     }
 
     my $method = $var->{'deliver'}->{'method_frame'}->{'routing_key'};
-
-
-
     
     if(!defined($method)){
 	$method = "help";
@@ -290,18 +301,19 @@ sub handle_request{
     }
 
     #--- check for method being defined
-    if (!defined $self->{'methods'}{$method}) {
+    if (!defined $self->methods->{$method}) {
+        $self->logger->error("Unknown Method: " . $method);
 	$self->_set_error("unknown method: $method");
 	$self->_return_error($reply_to);
 	return undef;
     }
     
     #--- have the method do its thing;
-    $self->{'methods'}{$method}->handle_request( $self->{'rabbit_mq'},
-						 $reply_to,
-						 $var->{'body'}->{'payload'},
-						 $self->{'default_input_validators'},
-						 $state);
+    $self->methods->{$method}->handle_request( $self->channel,
+                                               $reply_to,
+                                               $var->{'body'}->{'payload'},
+                                               $self->{'default_input_validators'},
+                                               $state);
 
     return 1;
 }
@@ -314,7 +326,7 @@ Method to retrives the list of registered methods
 sub get_method_list{
     my $self        = shift;
 
-    my @methods =  sort keys %{$self->{'methods'}};
+    my @methods =  sort keys %{$self->methods};
     return \@methods;
 
 }
@@ -327,8 +339,8 @@ returns method ref based upon specified name
 sub get_method{
     my $self        = shift;
     my $name  = shift;
-
-    return $self->{'methods'}{$name};
+    
+    return $self->methods->{$name};
 }
 
 
@@ -351,7 +363,7 @@ sub _set_error{
     my $self  = shift;
     my $error = shift;
 
-    $self->{'logger'}->error($error);
+    $self->logger->error($error);
     $self->{'error'} = $error;
 }
 
@@ -367,7 +379,9 @@ sub register_method{
     my $self  = shift;
     my $method_ref  = shift;
 
-    my $topic = $self->{'topic'};
+    return if(!$self->connected);
+
+    my $topic = $self->topic;
     if(defined($method_ref->{'topic'})){
         $topic = $method_ref->{'topic'};
     }
@@ -377,59 +391,41 @@ sub register_method{
     my $method_name = $method_ref->get_name();
     
     if (!defined $method_name) {
-	$self->{'logger'}->error(ref $method_ref."->get_name() returned undef");
+	$self->logger->error(ref $method_ref."->get_name() returned undef");
 	return;
     }
 
-    if (defined $self->{'methods'}{$method_name}) {
+    if (defined $self->methods->{$method_name}) {
 	$self->logger->error("$method_name already exists");
 	return;
     }
 
-    $self->{'methods'}{$method_name} = $method_ref;
+    $self->logger->error("Method Name: " . $method_name);
+
+    $self->methods->{$method_name} = $method_ref;
     if ($method_ref->{'is_default'}) {
 	$self->{'default_method'} = $method_name;
     }
+
     #--- set the Dispatcher reference
     $method_ref->set_dispatcher($self);
 
     my $cv = AnyEvent->condvar;
 
-    $self->{'rabbit_mq'}->bind_queue( queue => $self->{'rabbit_mq_queue'}->{method_frame}->{queue},
-				      exchange => $self->{'exchange'},
-				      routing_key => $method_ref->get_name(),
-				      on_success => sub {
-					  $cv->send();
-				      });
+    $self->logger->debug("Binding $method_name to queue");
+
+    $self->channel->bind_queue( queue => $self->queue,
+                                exchange => $self->exchange,
+                                routing_key => $method_ref->get_name(),
+                                on_success => sub {
+                                    $cv->send();
+                                } );
     
     $cv->recv;
 
     return 1;
 }
 
-=head2 connected
-
-=cut
-
-sub connected {
-    my ($self, $connected) = @_;
-
-    $self->{'connected_to_rabbit'} = $connected if(defined($connected));
-    
-    return $self->{'connected_to_rabbit'};
-}
-
-=head2 consuming
-
-=cut
-
-sub consuming{
-    my ($self, $consuming) = @_;
-
-    $self->{'is_consuming'} = $consuming if(defined($consuming));
-
-    return $self->{'is_consuming'};
-}
 
 =head2 start_consuming
 
@@ -439,9 +435,9 @@ please note that start_consuming will block forever in your application
 
 sub start_consuming{
     my $self = shift;
-    $self->consuming(1);    
-    $self->{'consuming_condvar'} = AnyEvent->condvar;
-    $self->{'consuming_condvar'}->recv();
+    $self->_set_consuming(1);    
+    $self->_set_consuming_condvar(AnyEvent->condvar);
+    $self->consuming_condvar->recv();
 }
 
 =head2 stop_consuming
@@ -450,8 +446,8 @@ sub start_consuming{
 
 sub stop_consuming{
     my $self = shift;
-    $self->consuming(0);
-    $self->{'consuming_condvar'}->send();
+    $self->_set_consuming(0);
+    $self->consuming_condvar->send();
 }
 
 1;

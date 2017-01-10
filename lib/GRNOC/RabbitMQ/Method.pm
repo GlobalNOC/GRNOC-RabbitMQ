@@ -155,15 +155,50 @@ sub update_name{
 
 =cut
 
+=head2 set_schema_validator
+
+Please note that this blows away any parameters specified through add_input_parameter
+
+=cut
+
 sub set_schema_validator{
     my $self = shift;
     my %params = @_;
+
+    if(!defined($params{'schema'})){
+        $self->{'logger'}->error("No Schema specified for the schema validator");
+        return;
+    }
+
+    my $validator = JSON::Schema->new( $params{'schema'});
+    if(!defined($validator)){
+        $self->set_error("Unable to create a validator based on schema: " . $params{'schema'});
+        return;
+    }
+
+    #ok presuming we made it this far... we need to parse the first chunk and add input parameters for it
+    if($validator->schema->{'type'} eq 'object'){
+        foreach my $key (keys (%{$validator->schema->{'properties'}})){
+            $self->{'input_params'}{$key}{'schema'} = $validator->schema->{'properties'}{$key};
+        }
+    }
+
+    $self->{'validator'} = $validator;
+    return 1;
+
+}
+
+
+sub _set_schema_validator{
+    my $self = shift;
+    my %params = @_;
+
     if(!defined($params{'schema'})){
 	$self->{'logger'}->error("No Schema specified for the schema validator");
 	return;
     }
 
-    my $validator = JSON::Schema->new($params{'schema'});
+    my $validator = JSON::Schema->new( $params{'schema'});
     if(!defined($validator)){
 	$self->set_error("Unable to create a validator based on schema: " . $params{'schema'});
 	return;
@@ -179,6 +214,11 @@ sub _build_schema{
     my @required;
     my $schema = {};
 
+    $schema->{'type'} = "object";
+    $schema->{'$schema'} = "http://json-schema.org/draft-04/schema#";
+    $schema->{'description'} = "Dynamically generated!";
+    $schema->{'additionalProperties'} = 0;
+
     foreach my $param (sort keys(%{$self->{'input_params'}})) {
 	my $pattern                         = $self->{'input_params'}{$param}{'pattern'};
 	my $required                        = $self->{'input_params'}{$param}{'required'};
@@ -189,14 +229,17 @@ sub _build_schema{
 	}
 
 	if(defined($schema_validator) && !defined($pattern)){
-	    $schema->{$param} = $schema_validator
+	    $schema->{'properties'}{$param} = $schema_validator
 	}else{
-	    $schema->{$param} = {'type' => 'any'}
+	    $schema->{'properties'}{$param} = {'type' => 'any'}
 	}
+        if($required){
+            $schema->{'properties'}{$param}->{'required'} = 1;
+        }
     }
     
     $schema->{'required'} = \@required;
-    return $schema;
+    return encode_json($schema);
 }
 
 sub _validate_schema{
@@ -219,14 +262,15 @@ sub _validate_schema{
     }
 
     my $res = $self->{'validator'}->validate($json);
+
     if($res){
 	$self->{'logger'}->debug("JSON Validated!");
 	return 1;
     }else{
-
+        
 	my $error_str = "";
-	foreach my $error (@{$res->errors}){
-	    $error_str .= $error . "\n";
+	foreach my $error ($res->errors){
+	    $error_str .= $error->{'property'} . " " . $error->{'message'};
 	}
 
 	$self->set_error("JSON did not validate against the specified Schema because: " . $error_str);
@@ -319,7 +363,7 @@ sub add_input_parameter{
     $self->{'input_params'}{$args{'name'}} = \%args;
 
     my $new_schema = $self->_build_schema();
-    $self->set_schema_validator( schema => $new_schema );
+    $self->_set_schema_validator( schema => $new_schema );
 
     return 1;
 }
@@ -337,7 +381,7 @@ sub remove_input_parameter{
 	delete $self->{'input_params'}{$param};
 	
 	my $new_schema = $self->_build_schema();
-	$self->set_schema_validator( schema => $new_schema );
+	$self->_set_schema_validator( schema => $new_schema );
 	
 	return 1;
     }
@@ -484,8 +528,8 @@ sub _return_error{
 				 routing_key => $reply_to->{'routing_key'},
 				 header => {'correlation_id' => $reply_to->{'correlation_id'}},
 				 body => JSON::XS::encode_json(\%error));
-    $rabbit_mq_channel->ack();
 
+    $rabbit_mq_channel->ack();
 }
 
 
@@ -508,10 +552,6 @@ sub _parse_input_parameters{
 	my $attachment                      = $self->{'input_params'}{$param}{'attachment'};
 	my $validation_error_text           = $self->{'input_params'}{$param}{'validation_error_text'};
 	my $schema                          = $self->{'input_params'}{$param}{'schema'};
-
-	
-
-
 
 	my $input = $inputs->{$param};
 

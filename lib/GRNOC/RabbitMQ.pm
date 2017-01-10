@@ -75,7 +75,7 @@ sub connect_to_rabbit{
 		 exclusive => undef, 
 		 type => undef,
 		 @_);
-    
+
     my $cv = AnyEvent->condvar;
 
     my $ar = AnyEvent::RabbitMQ->new->load_xml_spec()->connect(
@@ -97,7 +97,7 @@ sub connect_to_rabbit{
     
     if(!$status){
         return;
-        }
+    }
     
     return $ar;
 }
@@ -115,12 +115,14 @@ sub on_read_failure{
 =head2 on_close_handler
 
 =cut
+
 sub on_close_handler{
     my %params = @_;
 
     return sub {
         my $obj = $params{'obj'};
-        if($obj->consuming()){
+        $obj->logger->error("Connection to RabbitMQ Closed");
+        if($obj->consuming){
             $obj->stop_consuming();
         }
     };
@@ -135,8 +137,8 @@ sub on_client_close_handler{
 
     return sub {
         my $obj = $params{'obj'};
-
-        $obj->connected(0);
+        $obj->logger->error("Connection to RabbitMQ Closed");
+        $obj->_set_connected(0);
     };
 
 }
@@ -144,11 +146,12 @@ sub on_client_close_handler{
 =head2 on_failure_handler
 
 =cut
+
 sub on_failure_handler{
     my %params = @_;
 
     return sub{
-	warn "FAILED!!!\n";
+        $params{'obj'}->logger->error("Error connecting");
 	$params{'cv'}->send(0);
     };
 
@@ -157,12 +160,13 @@ sub on_failure_handler{
 =head2 channel_creator
 
 =cut
+
 sub channel_creator{
     my %params = @_;
     
     return sub{
         my $r = shift;
-
+        $params{'obj'}->logger->info("Successfully connected to RabbitMQ");
         $r->open_channel( on_success => GRNOC::RabbitMQ::exchange_creator( %params ),
 			  on_failure => GRNOC::RabbitMQ::on_failure_handler( %params ),
 			  on_close   => GRNOC::RabbitMQ::on_close_handler( %params) );
@@ -172,36 +176,41 @@ sub channel_creator{
 =head2 exchange_creator
 
 =cut
+
 sub exchange_creator{
     my %params = @_;
 
     return sub {
 	my $channel = shift;
+        $params{'obj'}->logger->info("Successfully created RabbitMQ Channel");
+        $params{'obj'}->_set_channel($channel);
 	$channel->declare_exchange( exchange => $params{'exchange'},
 				    type => $params{'type'},
-				    on_success => GRNOC::RabbitMQ::queue_declare($channel, %params),
-				    on_failure => GRNOC::RabbitMQ::on_failure_handler(%params) );
+				    on_success => GRNOC::RabbitMQ::queue_declare( %params ),
+				    on_failure => GRNOC::RabbitMQ::on_failure_handler( %params ) );
     };
 }
 
 =head2 queue_declare
 
 =cut
+
 sub queue_declare{
-    my $channel = shift;
     my %params = @_;
     
-
     return sub {
-	$channel->declare_queue( exclusive => $params{'exclusive'},
+        $params{'obj'}->logger->info("Successfully created RabbitMQ Exchange");
+	$params{'obj'}->channel->declare_queue( exclusive => $params{'exclusive'},
 				 queue => $params{'queue'},
 				 on_success => sub {
-				     my $queue = shift;
-				     $params{'obj'}->_set_queue($queue);
-				     $params{'obj'}->_set_channel($channel);
-				     $params{'cv'}->send(1);
+				     my $method = shift;
+                                     $params{'obj'}->logger->info("Successfully created Queue!");
+				     $params{'obj'}->_set_queue($method->method_frame->queue),
+				     $params{'obj'}->_set_connected(1);
+                                     $params{'cv'}->send(1);
 				 },
 				 on_failure => sub {
+                                     $params{'obj'}->logger->error("Unable to create Queue");
 				     $params{'cv'}->send(0);
 				 });
     };

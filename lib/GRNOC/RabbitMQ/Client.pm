@@ -19,8 +19,10 @@ use GRNOC::RabbitMQ;
 use Data::UUID;
 use GRNOC::Log;
 use JSON::XS;
+use Moo;
 use Time::HiRes qw( gettimeofday tv_interval);
 use Data::Dumper;
+
 
 =head1 NAME
 
@@ -71,164 +73,153 @@ sub main{
 
 main();
 
+=head2 BUILD
+
+=head2 Constructor Arguments / Attributes
+=item port
+=item user
+=item pass
+=item host
+=item vhost
+=item timeout
+=item queue_name
+=item topic
+=item topic
+=item exchange
+=item auto_reconnect
+=item on_success
+=item on_failure
+=item on_read_failure
+=item on_return
+=item on_close
+
+=head2 Internal Objects
+=item uuid
+=item logger
+=item pending_responses
+=item connected
+=item channel
+=item queue
+=item consuming
+=item callback_queue
+=item ar
+
 =cut
 
-=head2 new
+has port => (is => 'rwp', default => 5672, required => 1);;
+has user => (is => 'rwp', default => 'guest', required => 1);
+has pass => (is => 'rwp', required => 1);
+has host => (is => 'rwp', default => 'localhost', required => 1);
+has vhost => (is => 'rwp', default => '/', required => 1);
+has timeout => (is => 'rwp', default => 15, required => 1);
+has queue_name => (is => 'rwp');
+has topic => (is => 'rw', required => 1);
+has exchange => (is => 'rwp', required => 1);
+has auto_reconnect => (is => 'rw', default => 0);
+has on_success => (is => 'rwp', default => sub { return \&GRNOC::RabbitMQ::channel_creator }, required => 1);
+has on_failure => (is => 'rwp', default => sub { return \&GRNOC::RabbitMQ::on_failure_handler}, required => 1);
+has on_read_failure => (is => 'rwp', default => sub { return \&GRNOC::RabbitMQ::on_failure_handler}, required => 1);
+has on_return => (is => 'rwp', default => sub { return \&GRNOC::RabbitMQ::on_failure_handler}, required => 1);
+has on_close => (is => 'rwp', default => sub { return \&GRNOC::RabbitMQ::on_client_close_handler}), required => 1;
 
-=cut
-sub new{
-    my $class = shift;
+has uuid => (is => 'rwp');
+has logger => (is => 'rwp');
+has pending_responses => (is => 'rwp');
+has connected => (is => 'rwp');
+has channel => (is => 'rwp');
+has queue => (is => 'rwp');
+has consuming => (is => 'rwp');
+has callback_queue => (is => 'rwp');
+has ar => (is =>'rwp');
+
+
+sub BUILD{
+    my ($self) = @_;
     
-    my %args = ( host => 'localhost',
-                 port => 5672,
-                 user => undef,
-                 pass => undef,
-                 vhost => '/',
-                 timeout => 15,
-                 queue => undef,
-                 topic => undef,
-                 exchange => '',
-                 auto_reconnect => 0,
-                 on_success => \&GRNOC::RabbitMQ::channel_creator,
-                 on_failure => \&GRNOC::RabbitMQ::on_failure_handler,
-                 on_read_failure => \&GRNOC::RabbitMQ::on_failure_handler,
-                 on_return => \&GRNOC::RabbitMQ::on_failure_handler,
-                 on_close => \&GRNOC::RabbitMQ::on_client_close_handler,
-                 @_ );
-    
-    my $self = \%args;
-
-    $self->{'logger'} = Log::Log4perl->get_logger('GRNOC.RabbitMQ.Client');
-
-    $self->{'uuid'} = new Data::UUID;
-    bless $self, $class;
-
-    $self->{'pending_responses'} = {};
-    
+    $self->_set_logger(GRNOC::Log->get_logger('GRNOC.RabbitMQ.Client'));
+    $self->_set_uuid(Data::UUID->new);
+    $self->_set_pending_responses({});
     $self->_connect();
-
     return $self;
 }
 
 sub _connect{
     my $self = shift;
-
-    $self->{'logger'}->debug("Connecting to RabbitMQ");
+    
+    $self->logger->debug("Connecting to RabbitMQ");
 
     my $ar = GRNOC::RabbitMQ::connect_to_rabbit(
-        host => $self->{'host'},
-        port => $self->{'port'},
-        user => $self->{'user'},
-        pass => $self->{'pass'},
-        vhost => $self->{'vhost'},
-        timeout => $self->{'timeout'},
+        host => $self->host,
+        port => $self->port,
+        user => $self->user,
+        pass => $self->pass,
+        vhost => $self->vhost,
+        timeout => $self->timeout,
         tls => 0,
-        exchange => $self->{'exchange'},
+        exchange => $self->exchange,
         type => 'topic',
         obj => $self,
         exclusive => 1,
-        queue => undef,
-        on_success => $self->{'on_success'},
-        on_failure => $self->{'on_failure'},
-        on_read_failure => $self->{'on_read_failure'},
-        on_return => $self->{'on_return'},
-        on_close => $self->{'on_close'}
+        queue => $self->queue_name,
+        on_success => $self->on_success,
+        on_failure => $self->on_failure,
+        on_read_failure => $self->on_read_failure,
+        on_return => $self->on_return,
+        on_close => $self->on_close
         );
 
     if(!defined($ar)){
-        $self->{'logger'}->error("Unable to connect to RabbitMQ.");
+        $self->logger->error("Unable to connect to RabbitMQ.");
         return;
     }
 
-    $self->{'ar'} = $ar;
+    $self->_set_ar($ar);
 
-    $self->connected(1);
-    $self->{'logger'}->debug("Connected to Rabbit");
+    if(!$self->connected){
+        $self->logger->error("Error connecting to RabbitMQ");
+        return;
+    }
+
+    $self->logger->debug("Connected to Rabbit");
 
     my $cv = AnyEvent->condvar;
 
-    $self->{'rabbit_mq'}->bind_queue( exchange => $self->{'exchange'},
-                                      queue => $self->{'rabbit_mq_queue'}->{method_frame}->{queue},
-                                      routing_key => $self->{'rabbit_mq_queue'}->{method_frame}->{queue},
-                                      on_success => sub {
-                                          $cv->send($self->{'rabbit_mq_queue'}->{method_frame}->{queue});
-                                      });
+    $self->channel->bind_queue( exchange => $self->exchange,
+                                queue => $self->queue,
+                                routing_key => $self->queue,
+                                on_success => sub {
+                                    $cv->send($self->queue);
+                                });
     
     my $cbq = $cv->recv();
-    $self->{'callback_queue'} = $self->{'rabbit_mq_queue'}->{method_frame}->{queue};
+    $self->_set_callback_queue($self->queue);
     
-    $self->consuming(1);
-
-    $self->{'rabbit_mq'}->consume(
+    $self->_set_consuming(1);
+    
+    $self->channel->consume(
         no_ack => 1,
         on_consume => $self->on_response_cb()
         );
+        
 
     return 1;
 }
 
-=head2 connected
-
-=cut
-sub connected {
-    my ($self, $connected) = @_;
-
-    $self->{'connected_to_rabbit'} = $connected if(defined($connected));
-
-    return $self->{'connected_to_rabbit'};
-}
-
-=head2 auto_reconnect
-
-=cut
-sub auto_reconnect {
-    my ($self, $reconnect) = @_;
-
-    $self->{'auto_reconnect'} = $reconnect if(defined($reconnect));
-
-    return $self->{'auto_reconnect'};
-}
 
 =head2 stop_consuming
 
 =cut
+
 sub stop_consuming{
     my $self = shift;
-    $self->{'is_consuming'} = 0;
+    $self->_set_consuming(0);
 }
 
-=head2 consuming
 
-=cut
-sub consuming {
-    my ($self, $consuming) = @_;
-
-    $self->{'is_consuming'} = $consuming if(defined($consuming));
-
-    return $self->{'is_consuming'};
-}
 
 sub _generate_uuid{
     my $self = shift;
-    return $self->{'uuid'}->to_string($self->{'uuid'}->create());
-}
-
-=head2 _set_channel
-    
-=cut
-sub _set_channel{
-    my $self = shift;
-    my $channel = shift;
-    $self->{'rabbit_mq'} = $channel;
-}
-
-=head2 _set_queue
-    
-=cut
-sub _set_queue{
-    my $self = shift;
-    my $queue = shift;
-    $self->{'rabbit_mq_queue'} = $queue;
+    return $self->uuid->to_string($self->uuid->create());
 }
 
 =head2 on_response_cb
@@ -242,30 +233,34 @@ sub on_response_cb {
         
         my $end = [gettimeofday];
         
-        $self->{'logger'}->debug("on_response_cb callback args: " . Data::Dumper::Dumper($var));
+        $self->logger->debug("on_response_cb callback args: " . Data::Dumper::Dumper($var));
         
-        $self->{'logger'}->debug("Pending Responses: " . Data::Dumper::Dumper($self->{'pending_responses'}));
+        $self->logger->debug("Pending Responses: " . Data::Dumper::Dumper($self->pending_responses));
         
         my $corr_id = $var->{header}->{correlation_id};
         if (defined $self->{'pending_responses'}->{$corr_id}) {
-            $self->{'logger'}->debug("on_response_db callback result: " . $body);
-            $self->{'logger'}->debug("total time: " . tv_interval( $self->{'pending_responses'}->{$corr_id}->{'start'}, $end));
-            $self->{'pending_responses'}->{$corr_id}->{'cb'}(decode_json($body));
-            delete $self->{'pending_responses'}->{$corr_id};
+            $self->logger->debug("on_response_db callback result: " . $body);
+            $self->logger->debug("total time: " . tv_interval( $self->pending_responses->{$corr_id}->{'start'}, $end));
+            $self->pending_responses->{$corr_id}->{'cb'}(decode_json($body));
+            delete $self->pending_responses->{$corr_id};
         } else {
-            $self->{'logger'}->debug("I don't know what to do with corr_id: $corr_id");
+            $self->logger->debug("I don't know what to do with corr_id: $corr_id");
         }
     };
 }
 
 sub AUTOLOAD{
     my $self = shift;
+
+    my $name = our $AUTOLOAD;
     
-    if(!$self->connected()){
-        $self->{'logger'}->debug("Not connected to rabbit.");
+    $self->logger->error("Calling: " . $name);
+
+    if(!$self->connected){
+        $self->logger->debug("Not connected to rabbit.");
 
         if($self->auto_reconnect()){
-            $self->{'logger'}->debug("Attempting to reconnect to Rabbit.");
+            $self->logger->debug("Attempting to reconnect to Rabbit.");
 
             #--- try to reconnect, error out if we can't
             my $res = $self->_connect();
@@ -275,26 +270,27 @@ sub AUTOLOAD{
             }
         }
         else{
-            $self->{'logger'}->debug('Auto Reconnect disabled. Returning.');
+            $self->logger->debug('Auto Reconnect disabled. Returning.');
             return;
         }
     }
     
-    my $name = our $AUTOLOAD;
     
     my @stuff = split('::', $name);
     $name = pop(@stuff);
-    $self->{'logger'}->debug("Running name: " . $name . "\n");
-    $self->{'logger'}->debug("Params: " . Data::Dumper::Dumper(@_));
+    $self->logger->debug("Running name: " . $name . "\n");
+    $self->logger->debug("Params: " . Data::Dumper::Dumper(@_));
     my $params = {
         @_
     };
     
+    $self->logger->debug("Topic: " . $self->topic . "." . $name);
+
     if(defined($params->{'no_reply'}) && $params->{'no_reply'} == 1){
         delete $params->{'no_reply'};
-        $self->{'rabbit_mq'}->publish(
-            exchange => $self->{'exchange'},
-            routing_key => $self->{'topic'} . "." . $name,
+        $self->channel->publish(
+            exchange => $self->exchange,
+            routing_key => $self->topic . "." . $name,
             header => {
                 no_reply => 1,
             },
@@ -314,16 +310,16 @@ sub AUTOLOAD{
         }
         
         my $corr_id = $self->_generate_uuid();
-        $self->{'pending_responses'}->{$corr_id}{'cb'} = $callback;
-        $self->{'pending_responses'}->{$corr_id}{'start'} = [gettimeofday];
+        $self->pending_responses->{$corr_id}{'cb'} = $callback;
+        $self->pending_responses->{$corr_id}{'start'} = [gettimeofday];
         
-        $self->{'logger'}->debug("Correlation ID: " . $corr_id);
+        $self->logger->debug("Correlation ID: " . $corr_id);
         
-        $self->{'rabbit_mq'}->publish(
-            exchange => $self->{'exchange'},
-            routing_key => $self->{'topic'} . "." . $name,
+        $self->channel->publish(
+            exchange => $self->exchange,
+            routing_key => $self->topic . "." . $name,
             header => {
-                reply_to => $self->{'callback_queue'},
+                reply_to => $self->callback_queue,
                 correlation_id => $corr_id,
             },
             body => encode_json($params)
@@ -331,14 +327,14 @@ sub AUTOLOAD{
         
         
         my $timeout;
-        $timeout = AnyEvent->timer( after => $self->{'timeout'}, 
+        $timeout = AnyEvent->timer( after => $self->timeout, 
                                     cb => sub{
-                                        if(!defined($self->{'pending_responses'}->{$corr_id})) {
+                                        if(!defined($self->pending_responses->{$corr_id})) {
                                             return;
                                         }
-                                        my $cb = $self->{'pending_responses'}->{$corr_id}{'cb'};
+                                        my $cb = $self->pending_responses->{$corr_id}{'cb'};
                                         # deleting the pending response before calling back ensures $cb is only called once
-                                        delete $self->{'pending_responses'}->{$corr_id};
+                                        delete $self->pending_responses->{$corr_id};
                                         
                                         my $err = {error => "Timeout occured waiting for response"};
                                         if($do_async){
@@ -356,12 +352,8 @@ sub AUTOLOAD{
             return $res;
         }
         
-        $self->{'logger'}->debug("Moving on...")
+        $self->logger->debug("Moving on...")
     }
-}
-
-sub DESTROY{
-
 }
 
 1;
