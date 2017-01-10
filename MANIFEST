@@ -5,7 +5,7 @@ lib/GRNOC/RabbitMQ/Client.pm
 lib/GRNOC/RabbitMQ/Dispatcher.pm
 lib/GRNOC/RabbitMQ/Method.pm
 Makefile.PL
-MANIFEST
+MANIFEST			This list of files
 perl-GRNOC-RabbitMQ-1.0.0.tar.gz
 perl-GRNOC-RabbitMQ.spec
 README.md
@@ -20,8 +20,6 @@ t/07-async-method.t
 t/08-patterns.t
 t/09-unexpected-errors.t
 t/etc/test_logging.conf
-t/pod.t
-t/pod_coverage.t
 t/rabbitmq-death.t
 t/TEST
 tap/t/00-load.t
