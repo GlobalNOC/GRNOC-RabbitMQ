@@ -20,7 +20,6 @@ Requires: perl-JSON-Schema
 Requires: perl-autovivification
 Requires: perl(GRNOC::WebService::Regex)
 Requires: perl-Proc-Daemon
-Requires: uuid-perl
 Requires: perl-Moo
 
 %description
