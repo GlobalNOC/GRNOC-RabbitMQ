@@ -21,6 +21,7 @@ Requires: perl-autovivification
 Requires: perl(GRNOC::WebService::Regex)
 Requires: perl-Proc-Daemon
 Requires: perl-Moo
+Requires: perl(Data::UUID)
 
 %description
 The GRNOC::RabbitMQ collection is a set of perl modules which are used to
