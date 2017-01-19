@@ -197,7 +197,7 @@ sub _connect{
     $self->_set_consuming(1);
     
     $self->channel->consume(
-        no_ack => 1,
+        no_ack => 0,
         on_consume => $self->on_response_cb()
         );
         
@@ -234,18 +234,25 @@ sub on_response_cb {
         my $end = [gettimeofday];
         
         $self->logger->debug("on_response_cb callback args: " . Data::Dumper::Dumper($var));
-        
         $self->logger->debug("Pending Responses: " . Data::Dumper::Dumper($self->pending_responses));
         
         my $corr_id = $var->{header}->{correlation_id};
         if (defined $self->{'pending_responses'}->{$corr_id}) {
             $self->logger->debug("on_response_db callback result: " . $body);
             $self->logger->debug("total time: " . tv_interval( $self->pending_responses->{$corr_id}->{'start'}, $end));
-            $self->pending_responses->{$corr_id}->{'cb'}(decode_json($body));
+
+            my $cb = $self->pending_responses->{$corr_id}{'cb'};
+
+            delete $self->pending_responses->{$corr_id}->{'cb'};
+            delete $self->pending_responses->{$corr_id}->{'timeout'};
             delete $self->pending_responses->{$corr_id};
+
+            &$cb(decode_json($body));
         } else {
             $self->logger->debug("I don't know what to do with corr_id: $corr_id");
         }
+
+        $self->channel->ack();
     };
 }
 
@@ -326,28 +333,27 @@ sub AUTOLOAD{
             );
         
         
-        my $timeout;
-        $timeout = AnyEvent->timer( after => $self->timeout, 
-                                    cb => sub{
-                                        if(!defined($self->pending_responses->{$corr_id})) {
-                                            return;
-                                        }
-                                        my $cb = $self->pending_responses->{$corr_id}{'cb'};
-                                        # deleting the pending response before calling back ensures $cb is only called once
-                                        delete $self->pending_responses->{$corr_id};
-                                        
-                                        my $err = {error => "Timeout occured waiting for response"};
-                                        if($do_async){
-                                            &$cb($err);
-                                        }else{
-                                            $cv->send($err);
-                                        }
-                                        
-                                        # needed to keep $timeout from being GCed before the timer fires
-                                        undef $timeout;
-                                    });
+        $self->pending_responses->{$corr_id}->{'timeout'} = AnyEvent->timer( after => $self->timeout,
+                                                                             cb => sub{
+                                                                                 if (!defined $self->pending_responses->{$corr_id}) {
+                                                                                     return;
+                                                                                 }
+
+                                                                                 my $cb = $self->pending_responses->{$corr_id}{'cb'};
+
+                                                                                 delete $self->pending_responses->{$corr_id}->{'cb'};
+                                                                                 delete $self->pending_responses->{$corr_id}->{'timeout'};
+                                                                                 delete $self->pending_responses->{$corr_id};
+
+                                                                                 my $err = {error => "Timeout occured waiting for response"};
+                                                                                 if ($do_async) {
+                                                                                     &$cb($err);
+                                                                                 } else {
+                                                                                     $cv->send($err);
+                                                                                 }
+                                                                             });
         
-        if(!$do_async){
+        if (!$do_async) {
             my $res = $cv->recv();
             return $res;
         }
