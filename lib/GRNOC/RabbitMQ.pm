@@ -205,7 +205,7 @@ sub queue_declare{
 				 on_success => sub {
 				     my $method = shift;
                                      $params{'obj'}->logger->info("Successfully created Queue!");
-				     $params{'obj'}->_set_queue($method->method_frame->queue),
+				     $params{'obj'}->_set_queue($method->method_frame->queue);
 				     $params{'obj'}->_set_connected(1);
                                      $params{'cv'}->send(1);
 				 },
