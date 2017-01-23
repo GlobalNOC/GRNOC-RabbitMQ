@@ -200,9 +200,11 @@ sub _connect_to_rabbit{
 
     my $dispatcher = $self;
     $self->channel->consume( queue => $self->queue,
+                             no_ack => 0,
                              on_consume => sub {
                                  my $message = shift;
                                  $dispatcher->handle_request($message);
+                                 $self->channel->ack();
                              });
     
 }
