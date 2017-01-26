@@ -166,11 +166,9 @@ sub BUILD{
 }
 
 sub _connect_to_rabbit{
-    
     my $self = shift;
-    
-    $self->logger->error("Connecting to RabbitMQ");
-    
+    $self->logger->debug("Connecting to RabbitMQ.");
+
     my $ar = GRNOC::RabbitMQ::connect_to_rabbit(
         host => $self->host,
         port => $self->port,
@@ -190,23 +188,38 @@ sub _connect_to_rabbit{
         on_return => $self->on_return,
         on_close => $self->on_close
         );
-    
     $self->_set_ar($ar);
 
-    if(!$self->connected){
+    if (!$self->connected) {
         $self->logger->error("Unable to connect to RabbitMQ");
-        return;
+        return undef;
     }
+    $self->logger->info("Connected to RabbitMQ.");
 
     my $dispatcher = $self;
-    $self->channel->consume( queue => $self->queue,
-                             no_ack => 0,
+    my $status     = AnyEvent->condvar;
+    $self->channel->consume( queue      => $self->queue,
+                             no_ack     => 0,
+                             on_success => sub {
+                                 $self->logger->info("Consuming messages from RabbitMQ.");
+                                 $status->send(1);
+                             },
+                             on_failure => sub {
+                                 $self->logger->error("Unable to consume messages from RabbitMQ.");
+                                 $status->send(0);
+                             },
                              on_consume => sub {
                                  my $message = shift;
                                  $dispatcher->handle_request($message);
                                  $self->channel->ack();
-                             });
-    
+                             } );
+
+    my $ok = $status->recv();
+    if (!$ok) {
+        return undef;
+    }
+
+    return 1;
 }
 
 =head2 help()
@@ -371,11 +384,13 @@ sub _set_error{
 
 
 =head2 register_method()
+
 This is used to register a web service method.  Three items are needed
 to register a method: a method name, a function callback and a method configuration.
 The callback will accept one input argument which will be a reference to the arguments
 structure for that method, with the "value" attribute added.
 The callback should return a pointer to the results data structure.
+
 =cut
 sub register_method{
     my $self  = shift;
@@ -420,11 +435,11 @@ sub register_method{
                                 exchange => $self->exchange,
                                 routing_key => $method_ref->get_name(),
                                 on_success => sub {
+                                    $self->logger->info("Calling on_success for bind_queue");
                                     $cv->send();
                                 } );
-    
-    $cv->recv;
 
+    $cv->recv;
     return 1;
 }
 
