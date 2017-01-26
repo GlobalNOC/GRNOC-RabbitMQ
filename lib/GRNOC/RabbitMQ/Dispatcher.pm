@@ -435,7 +435,6 @@ sub register_method{
                                 exchange => $self->exchange,
                                 routing_key => $method_ref->get_name(),
                                 on_success => sub {
-                                    $self->logger->info("Calling on_success for bind_queue");
                                     $cv->send();
                                 } );
 
