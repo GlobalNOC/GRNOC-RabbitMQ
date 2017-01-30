@@ -19,6 +19,7 @@ use GRNOC::Log;
 use JSON::XS;
 use JSON::Schema;
 use GRNOC::WebService::Regex;
+use Storable qw(dclone);
 
 =head1 NAME
 
@@ -729,7 +730,7 @@ sub handle_request {
 
     if($self->{'async'}){
 	
-	my $results = &$callback($self,$self->{'input_params'},$state);
+	my $results = &$callback($self,dclone($self->{'input_params'}),$state);
 	return 1;
 
     }else{
