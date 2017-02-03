@@ -1,7 +1,7 @@
 Summary: GRNOC RabbitMQ Perl Libraries
 Name: perl-GRNOC-RabbitMQ
-Version: 1.0.1
-Release: 3%{?dist}
+Version: 1.0.2
+Release: 1%{?dist}
 License: APL 2.0
 Group: Network
 URL: http://globalnoc.iu.edu
