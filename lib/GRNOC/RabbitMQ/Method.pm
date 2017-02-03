@@ -724,7 +724,11 @@ sub handle_request {
     #--- call the callback
     my $callback    = $self->{'callback'};
 
-    $self->{'success_callback'} = sub { my $results = shift; $self->_return_results($rabbit_mq_channel, $reply_to, $results); };
+    $self->{'success_callback'} = sub { 
+        my $results = shift; 
+        $self->_return_results($rabbit_mq_channel, $reply_to, $results); 
+    };
+
     $self->{'error_callback'} = sub { $self->_return_error($rabbit_mq_channel, $reply_to); };
 
     if($self->{'async'}){
