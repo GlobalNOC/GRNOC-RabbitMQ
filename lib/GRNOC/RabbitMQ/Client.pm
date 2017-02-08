@@ -261,7 +261,7 @@ sub AUTOLOAD{
 
     my $name = our $AUTOLOAD;
     
-    $self->logger->error("Calling: " . $name);
+    $self->logger->debug("Calling: " . $name);
 
     if(!$self->connected){
         $self->logger->debug("Not connected to rabbit.");
