@@ -473,11 +473,21 @@ sub set_dispatcher{
 
 
 =head2 _return_results()
- protected method for formatting callback results and setting httpd response headers
+
+Protected method for formatting RPC results. Historically the
+GlobalNOC has placed RPC results in an array under the results key of
+a hash; This is no longer the case. RPC results are now wrapped in a
+parent hash under the 'results' key; An array is not provided to the
+caller.
+
+Formats results in JSON then sets proper cache directive header and
+off we go.
+
+    {
+        results => $results
+    }
+
 =cut
-
-
-#----- formats results in JSON then sets proper cache directive header and off we go
 sub _return_results{
     my $self     = shift;
     my $rabbit_mq_channel = shift;
@@ -493,43 +503,65 @@ sub _return_results{
 
     my $json = encode_json($results);
 
-    $rabbit_mq_channel->publish( exchange => $reply_to->{'exchange'},
-				 routing_key => $reply_to->{'routing_key'},
-				 header => {'correlation_id' => $reply_to->{'correlation_id'}},
-				 body => $json);
+    $rabbit_mq_channel->publish(
+        exchange => $reply_to->{'exchange'},
+        routing_key => $reply_to->{'routing_key'},
+        header => {'correlation_id' => $reply_to->{'correlation_id'}},
+        body => $json
+    );
     $rabbit_mq_channel->ack();
 
 }
 
 =head2 _return_error()
- protected method for formatting callback results and setting httpd response headers
+
+Protected method for formatting RPC errors. RPC error results are
+wrapped in a parent hash under the 'error' key.
+
+Formats results in JSON then seddts proper cache directive header and
+off we go.
+
+    {
+        error => $results
+    }
+
 =cut
-
-
-#----- formats results in JSON then seddts proper cache directive header and off we go
 sub _return_error{
-    my $self                = shift;
-    my $rabbit_mq_channel   = shift;
-    my $reply_to            = shift;
+    my $self              = shift;
+    my $rabbit_mq_channel = shift;
+    my $reply_to          = shift;
+    my $results           = shift;
 
     my %error;
 
-    $error{"error"}   = 1;
-    $error{'error_text'}  = $self->get_error();
-    $error{'results'}   = undef;
-
-    #--- would be nice if client could pass a output format param and select between json and xml?
+    if (!defined $results) {
+        # Left in for legacy purposes, although I'm not sure this was
+        # ever actually used.
+        $error{"error"}      = 1;
+        $error{'error_text'} = $self->get_error();
+    } else {
+        $error{"error"} = $results;
+    }
     
-    if(!defined($reply_to->{'routing_key'})){
+    if (!defined($reply_to->{'routing_key'})) {
 	$rabbit_mq_channel->ack();
 	return;
     }
 
-    $rabbit_mq_channel->publish( exchange => $reply_to->{'exchange'},
-				 routing_key => $reply_to->{'routing_key'},
-				 header => {'correlation_id' => $reply_to->{'correlation_id'}},
-				 body => JSON::XS::encode_json(\%error));
+    my $json;
+    eval {
+        $json = JSON::XS::encode_json(\%error);
+    };
+    if ($@) {
+        $error{"error"} = "$@";
+    }
 
+    $rabbit_mq_channel->publish(
+        exchange => $reply_to->{'exchange'},
+        routing_key => $reply_to->{'routing_key'},
+        header => {'correlation_id' => $reply_to->{'correlation_id'}},
+        body => $json
+    );
     $rabbit_mq_channel->ack();
 }
 
@@ -730,7 +762,10 @@ sub handle_request {
         $self->_return_results($rabbit_mq_channel, $reply_to, $results); 
     };
 
-    $self->{'error_callback'} = sub { $self->_return_error($rabbit_mq_channel, $reply_to); };
+    $self->{'error_callback'} = sub {
+        my $results = shift;
+        $self->_return_error($rabbit_mq_channel, $reply_to, $results);
+    };
 
     if($self->{'async'}){
 	
