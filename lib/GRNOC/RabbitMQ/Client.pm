@@ -247,6 +247,19 @@ sub on_response_cb {
             delete $self->pending_responses->{$corr_id}->{'timeout'};
             delete $self->pending_responses->{$corr_id};
 
+            my $decoded_body;
+            eval {
+                $decoded_body = decode_json($body);
+            };
+
+            if(!defined($decoded_body)){
+                warn "Unable to decode JSON String: " . $body . "\n";
+                warn "JSON Parser error: " . $@ . "\n";
+                $self->logger->error("Unable to decode JSON String: " . $body);
+                $self->logger->error("JSON Parser error: " . $@);
+                $decoded_body = { error => "unable to decode JSON string: " . $body};
+            }
+
             &$cb(decode_json($body));
         } else {
             $self->logger->debug("I don't know what to do with corr_id: $corr_id");
