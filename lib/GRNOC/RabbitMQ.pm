@@ -72,7 +72,7 @@ sub connect_to_rabbit{
 		 exchange => undef,
 		 obj => undef,
 		 queue => undef,
-		 exclusive => undef, 
+		 exclusive => 0,
 		 type => undef,
 		 @_);
 
