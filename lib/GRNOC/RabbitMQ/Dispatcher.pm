@@ -77,6 +77,9 @@ main();
 =head2 BUILD
 
 =head2 Constructor Arguments / Attributes
+
+=over 4
+
 =item port
 =item user
 =item pass
@@ -85,6 +88,7 @@ main();
 =item timeout
 =item queue_name
 =item topic
+=item exclusive
 =item exchange
 =item auto_reconnect
 =item on_success
@@ -93,15 +97,25 @@ main();
 =item on_return
 =item on_close
 
+=back
+
+=cut
+
 =head2 Internal Objects
+
+=over 4
+
 =item logger
 =item connected
 =item channel
 =item queue
 =item consuming
+=item methods
 =item consuming_condvar
 =item ar
 =item state
+
+=back
 
 =cut
 
@@ -135,12 +149,11 @@ has state => (is => 'rwp');
 
 sub BUILD{
     my ($self) = @_;
-    
-    
+
     $self->_set_logger(GRNOC::Log->get_logger("GRNOC::RabbitMQ::Dispatcher"));
 
     $self->logger->error("Dispatcher connecting to RabbitMQ");
-    
+
     $self->_set_connected(0);
     $self->_connect_to_rabbit();
 
@@ -153,19 +166,20 @@ sub BUILD{
         is_default   => 1,
         callback     => \&help,
         );
-    
+
     $help_method->set_schema_validator(
         schema => { 'type' => 'object',
                     'properties' => { "method_name" => {'type' => 'string'} }}
         );
-    
+
     $self->register_method($help_method);
-    
-    
+
     return $self;
-    
 }
 
+=head2 _connect_to_rabbit
+
+=cut
 sub _connect_to_rabbit{
     my $self = shift;
     $self->logger->debug("Connecting to RabbitMQ.");
@@ -224,7 +238,9 @@ sub _connect_to_rabbit{
 }
 
 =head2 help()
+
 returns list of avail methods or if parameter 'method_name' provided, the details about that method
+
 =cut
 sub help{
     my $m_ref   = shift;
@@ -253,7 +269,11 @@ sub help{
 }
 
 
-#----- formats results in JSON then seddts proper cache directive header and off we go
+=head2 _return_error
+
+formats results in JSON then seddts proper cache directive header and off we go
+
+=cut
 sub _return_error{
     my $self        = shift;
     my $reply_to    = shift;
@@ -264,26 +284,24 @@ sub _return_error{
     $error{"error"} = 1;
     $error{'error_text'} = $self->get_error();
     $error{'results'} = undef;
-    
+
     if(!defined($reply_to->{'routing_key'})){
 	$rabbit_mq_connection->ack();
 	return;
 
     }
-    
+
     $rabbit_mq_connection->publish( exchange => $reply_to->{'exchange'},
 				    routing_key => $reply_to->{'routing_key'},
 				    header => {'correlation_id' => $reply_to->{'correlation_id'}},
 				    body => JSON::XS::encode_json(\%error));
     $rabbit_mq_connection->ack();
-    
 }
 
 
 =head2 handle_request
 
 =cut
-
 sub handle_request{
     my $self = shift;
     my $var = shift;
@@ -336,9 +354,10 @@ sub handle_request{
 
 
 =head2 get_method_list()
-Method to retrives the list of registered methods
-=cut
 
+Method to retrives the list of registered methods
+
+=cut
 sub get_method_list{
     my $self        = shift;
 
@@ -349,22 +368,24 @@ sub get_method_list{
 
 
 =head2 get_method($name)
-returns method ref based upon specified name
-=cut
 
+returns method ref based upon specified name
+
+=cut
 sub get_method{
     my $self        = shift;
     my $name  = shift;
-    
+
     return $self->methods->{$name};
 }
 
 
 
 =head2 get_error()
-gets the last error encountered or undef.
-=cut
 
+gets the last error encountered or undef.
+
+=cut
 sub get_error{
     my $self  = shift;
     return $self->{'error'};
@@ -372,9 +393,10 @@ sub get_error{
 
 
 =head2 _set_error()
-protected method which sets a new error and prints it to stderr
-=cut
 
+protected method which sets a new error and prints it to stderr
+
+=cut
 sub _set_error{
     my $self  = shift;
     my $error = shift;
@@ -449,7 +471,6 @@ sub register_method{
 please note that start_consuming will block forever in your application
 
 =cut
-
 sub start_consuming{
     my $self = shift;
     $self->_set_consuming(1);    
@@ -460,7 +481,6 @@ sub start_consuming{
 =head2 stop_consuming
 
 =cut
-
 sub stop_consuming{
     my $self = shift;
     $self->_set_consuming(0);
