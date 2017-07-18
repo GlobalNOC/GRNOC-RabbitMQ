@@ -348,7 +348,9 @@ sub handle_request{
                                                $var->{'body'}->{'payload'},
                                                $self->{'default_input_validators'},
                                                $state);
-
+    #if it took a long time to call the method it is possible the anyevent
+    #timer is now screwed up this will refresh it
+    AnyEvent->now_update;
     return 1;
 }
 

@@ -261,6 +261,9 @@ sub on_response_cb {
             }
 
             &$cb(decode_json($body));
+            #if the callback takes a long time to update the timers may get screwed up
+            #we update the now_update to update it
+            AnyEvent->now_update;
         } else {
             $self->logger->debug("I don't know what to do with corr_id: $corr_id");
         }

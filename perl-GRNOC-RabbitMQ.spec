@@ -1,6 +1,6 @@
 Summary: GRNOC RabbitMQ Perl Libraries
 Name: perl-GRNOC-RabbitMQ
-Version: 1.1.0
+Version: 1.1.1
 Release: 1%{?dist}
 License: APL 2.0
 Group: Network
