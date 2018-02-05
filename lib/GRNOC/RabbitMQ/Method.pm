@@ -535,17 +535,14 @@ sub _return_error{
     my %error;
 
     if (!defined $results) {
-        # Left in for legacy purposes, although I'm not sure this was
-        # ever actually used.
-        $error{"error"}      = 1;
-        $error{'error_text'} = $self->get_error();
+        $error{"error"} = $self->get_error();
     } else {
         $error{"error"} = $results;
     }
-    
+
     if (!defined($reply_to->{'routing_key'})) {
-	$rabbit_mq_channel->ack();
-	return;
+        $rabbit_mq_channel->ack();
+        return;
     }
 
     my $json;
