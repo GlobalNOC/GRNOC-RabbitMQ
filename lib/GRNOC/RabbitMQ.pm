@@ -51,7 +51,7 @@ use warnings;
 
 use AnyEvent::RabbitMQ;
 
-our $VERSION = '1.1.1';
+our $VERSION = '1.2.0';
 
 
 =head2 connect_to_rabbit
