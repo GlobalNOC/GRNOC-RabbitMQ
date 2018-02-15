@@ -68,8 +68,8 @@ $client->plus( a => 5,
 
 $dispatcher->start_consuming();
 
-ok(defined($res->{'error'}) && $res->{'error'} == 1, "Error was defined");
-ok($res->{'error_text'} eq 'JSON did not validate against the specified Schema because: $.b string value found, but a number is required', "Proper error text was returned");
+ok(defined($res->{'error'}), "Error was defined");
+ok($res->{'error'} eq 'JSON did not validate against the specified Schema because: $.b string value found, but a number is required', "Proper error text was returned");
 
 
 $client->plus( a => 5,
@@ -93,8 +93,8 @@ $client->plus( a => 5,
 
 $dispatcher->start_consuming();
 
-ok(defined($res->{'error'}) && $res->{'error'} == 1, "Error was defined");
-ok($res->{'error_text'} eq 'JSON did not validate against the specified Schema because: $.b is missing and it is required', "Proper error text was returned");
+ok(defined($res->{'error'}), "Error was defined");
+ok($res->{'error'} eq 'JSON did not validate against the specified Schema because: $.b is missing and it is required', "Proper error text was returned");
 
 $method->set_schema_validator( schema => { type => 'object',
                                            additionalProperties => 0,
@@ -111,5 +111,5 @@ $client->plus( a => 5,
 
 $dispatcher->start_consuming();
 
-ok(defined($res->{'error'}) && $res->{'error'} == 1, "Error was defined");
-ok($res->{'error_text'} eq 'JSON did not validate against the specified Schema because: $ The property c is not defined in the schema and the schema does not allow additional properties', "failes when we specify the additional properties");
+ok(defined($res->{'error'}), "Error was defined");
+ok($res->{'error'} eq 'JSON did not validate against the specified Schema because: $ The property c is not defined in the schema and the schema does not allow additional properties', "failes when we specify the additional properties");

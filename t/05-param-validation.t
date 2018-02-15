@@ -68,8 +68,8 @@ $client->plus( a => 5,
 
 $dispatcher->start_consuming();
 
-ok(defined($res->{'error'}) && $res->{'error'} == 1, "Error was defined");
-ok($res->{'error_text'} eq 'Test.Data.plus: CGI input parameter b does not match pattern /^(-?[0-9]+)$/ ', "Proper error text was returned");
+ok(defined($res->{'error'}), "Error was defined");
+ok($res->{'error'} eq 'Test.Data.plus: CGI input parameter b does not match pattern /^(-?[0-9]+)$/ ', "Proper error text was returned");
 
 
 $client->plus( a => 5,
@@ -82,8 +82,8 @@ $client->plus( a => 5,
 
 $dispatcher->start_consuming();
 
-ok(defined($res->{'error'}) && $res->{'error'} == 1, "Error was defined");
-ok($res->{'error_text'} eq 'JSON did not validate against the specified Schema because: $ The property c is not defined in the schema and the schema does not allow additional properties', "Proper error text was retuned");
+ok(defined($res->{'error'}), "Error was defined");
+ok($res->{'error'} eq 'JSON did not validate against the specified Schema because: $ The property c is not defined in the schema and the schema does not allow additional properties', "Proper error text was retuned");
 
 $client->plus( a => 5,
                async_callback => sub {
@@ -93,5 +93,5 @@ $client->plus( a => 5,
 
 $dispatcher->start_consuming();
 
-ok(defined($res->{'error'}) && $res->{'error'} == 1, "Error was defined");
-ok($res->{'error_text'} eq 'JSON did not validate against the specified Schema because: $.b is missing and it is required', "Proper error text was returned");
+ok(defined($res->{'error'}), "Error was defined");
+ok($res->{'error'} eq 'JSON did not validate against the specified Schema because: $.b is missing and it is required', "Proper error text was returned");
