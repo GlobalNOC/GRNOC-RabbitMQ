@@ -86,6 +86,7 @@ main();
 =item host
 =item vhost
 =item timeout
+=item prefetch_count
 =item queue_name
 =item topic
 =item exclusive
