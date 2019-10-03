@@ -125,6 +125,7 @@ has pass => (is => 'rwp', required => 1);
 has host => (is => 'rwp', default => 'localhost', required => 1);
 has vhost => (is => 'rwp', default => '/', required => 1);
 has timeout => (is => 'rwp', default => 15, required => 1);
+has prefetch_count => (is => 'rwp', default => 1, required => 1);
 has queue_name => (is => 'rwp', required => 0);
 has topic => (is => 'rwp', required => 1);
 has exclusive => (is => 'rwp', default => 0);
@@ -191,6 +192,7 @@ sub _connect_to_rabbit{
         pass => $self->pass,
         vhost => $self->vhost,
         timeout => $self->timeout,
+        prefetch_count => $self->prefetch_count,
         tls => 0,
         exchange => $self->exchange,
         type => 'topic',

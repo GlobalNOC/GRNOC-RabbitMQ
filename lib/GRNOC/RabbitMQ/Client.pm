@@ -112,6 +112,7 @@ has pass => (is => 'rwp', required => 1);
 has host => (is => 'rwp', default => 'localhost', required => 1);
 has vhost => (is => 'rwp', default => '/', required => 1);
 has timeout => (is => 'rwp', default => 15, required => 1);
+has prefetch_count => (is => 'rwp', default => 1, required => 1);
 has queue_name => (is => 'rwp');
 has topic => (is => 'rw', required => 1);
 has exchange => (is => 'rwp', required => 1);
@@ -155,6 +156,7 @@ sub _connect{
         pass => $self->pass,
         vhost => $self->vhost,
         timeout => $self->timeout,
+        prefetch_count => $self->prefetch_count,
         tls => 0,
         exchange => $self->exchange,
         type => 'topic',
@@ -276,7 +278,10 @@ sub AUTOLOAD{
     my $self = shift;
 
     my $name = our $AUTOLOAD;
-    
+
+    # Don't need to do anything for the destructor
+    return if ($name =~ /DESTROY$/);
+
     $self->logger->debug("Calling: " . $name);
 
     if(!$self->connected){

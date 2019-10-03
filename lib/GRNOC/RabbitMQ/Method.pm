@@ -178,7 +178,7 @@ sub set_schema_validator{
     }
 
     #ok presuming we made it this far... we need to parse the first chunk and add input parameters for it
-    if($validator->schema->{'type'} eq 'object'){
+    if(defined $validator->schema->{'type'} && $validator->schema->{'type'} eq 'object'){
         foreach my $key (keys (%{$validator->schema->{'properties'}})){
             $self->{'input_params'}{$key}{'schema'} = $validator->schema->{'properties'}{$key};
         }

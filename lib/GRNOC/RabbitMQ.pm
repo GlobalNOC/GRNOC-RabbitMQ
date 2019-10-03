@@ -51,7 +51,7 @@ use warnings;
 
 use AnyEvent::RabbitMQ;
 
-our $VERSION = '1.2.0';
+our $VERSION = '1.2.1';
 
 
 =head2 connect_to_rabbit
@@ -182,7 +182,17 @@ sub exchange_creator{
 
     return sub {
 	my $channel = shift;
+
         $params{'obj'}->logger->info("Successfully created RabbitMQ Channel");
+
+        # apply QoS to the channel to ensure only the desired message rate
+	if (defined $params{'obj'}{'prefetch_count'}){
+	    $params{'obj'}->logger->info("Applying QoS to channel");
+	    $channel->qos(prefetch_count => $params{'obj'}{'prefetch_count'},
+			  on_success     => sub { $params{'obj'}->logger->info("QoS applied successfully"); },
+			  on_failure     => GRNOC::RabbitMQ::on_failure_handler( %params ));
+	}
+
         $params{'obj'}->_set_channel($channel);
 	$channel->declare_exchange( exchange => $params{'exchange'},
 				    type => $params{'type'},
