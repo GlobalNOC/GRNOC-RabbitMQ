@@ -10,7 +10,7 @@ use Cwd;
 use Proc::Daemon;
 use AnyEvent;
 
-use Proc::ProcessTable;
+use Devel::Size;
 
 use GRNOC::RabbitMQ::Dispatcher;
 use GRNOC::RabbitMQ::Method;
@@ -29,11 +29,12 @@ my $dispatcher = GRNOC::RabbitMQ::Dispatcher->new(
 
 my $method = GRNOC::RabbitMQ::Method->new(
     name => "foo",
+    async => 0,
     description => "does nothing",
     callback => sub { my $mref = shift; my $pref = shift;
-		      return {status => $pref->{'val'}{'value'}};
+                      return {status => $pref->{'val'}{'value'}};
     });
-		      
+                      
 $method->add_input_parameter(
     name => 'val',
     description => "value",
@@ -47,48 +48,34 @@ my $client = GRNOC::RabbitMQ::Client->new(
     pass => "guest"
     );
 
-
 my $res;
 
-warn "MY PID: " . $$ . "\n";
+my @chars=('a'..'z','A'..'Z','0'..'9','_');
 
-my $t = new Proc::ProcessTable;
 my $size;
-my $new_size;
-foreach my $p (@{$t->table}){
-    next unless $p->pid == $$;
-    $size = $p->size;
-}
 
-my $i=0;
+my $i = 0;
 while($i<10000){
-    
-    my @chars=('a'..'z','A'..'Z','0'..'9','_');
-    my $random_string;
+
+    my $random_string = "";
     foreach (1..100) 
     {
-	# rand @chars will generate a random 
-	# number between 0 and scalar @chars
-	$random_string.=$chars[rand @chars];
+        # rand @chars will generate a random 
+        # number between 0 and scalar @chars
+        $random_string.=$chars[rand @chars];
     }
     
-    $res;
-    $client->foo( val => $random_string,
-		  async_callback => sub {
-		      $res = shift;
-		      #warn Dumper($res);
-		      $dispatcher->stop_consuming();
-		  });
-    
-    $dispatcher->start_consuming();
-    $i++;
+    $res = $client->foo( val => $random_string );
+
+    # grab the size of the dispatcher after handling the first few requests, ie after "warm up"
+    if ($i++ == 5){
+        $size = Devel::Size::total_size($dispatcher);
+        diag("sizeof sync dispatcher is $size");        
+    }
 }
 
-my $t = new Proc::ProcessTable;
-foreach my $p (@{$t->table}){
-    next unless $p->pid == $$;
-    $new_size = $p->size;
-}
+my $new_size = Devel::Size::total_size($dispatcher);
+diag("sizeof sync dispatcher is now $new_size (original = $size)");
 
 my $growth = $new_size - $size;
 
@@ -107,42 +94,39 @@ $method->add_input_parameter(
 
 $dispatcher->register_method($method);
 
-$t = new Proc::ProcessTable;
-
-foreach my $p (@{$t->table}){
-    next unless $p->pid == $$;
-    $size = $p->size;
-}
-
-my $i=0;
+$i=0;
 while($i<10000){
     
     my @chars=('a'..'z','A'..'Z','0'..'9','_');
     my $random_string;
     foreach (1..100)
     {
-	# rand @chars will generate a random
-	# number between 0 and scalar @chars
-	$random_string.=$chars[rand @chars];
+        # rand @chars will generate a random
+        # number between 0 and scalar @chars
+        $random_string.=$chars[rand @chars];
     }
     
     $res;
     $client->foo( val => $random_string,
-		  async_callback => sub {
-		      $res = shift;
-		      #warn Dumper($res);
-		      $dispatcher->stop_consuming();
-		  });
+                  async_callback => sub {
+                      $res = shift;
+                      #warn Dumper($res);
+                      $dispatcher->stop_consuming();
+                  });
     
     $dispatcher->start_consuming();
-    $i++;
+
+    # grab the size of the dispatcher after handling the first few requests, ie after "warm up"
+    if ($i++ == 5){
+        $size = Devel::Size::total_size($dispatcher);
+        diag("sizeof async dispatcher is $size");
+    }
+
+
 }
 
-$t = new Proc::ProcessTable;
-foreach my $p (@{$t->table}){
-    next unless $p->pid == $$;
-    $new_size = $p->size;
-}
+$new_size = Devel::Size::total_size($dispatcher);
+diag("sizeof sync dispatcher is now $new_size (original = $size)");
 
 $growth = $new_size - $size;
 
