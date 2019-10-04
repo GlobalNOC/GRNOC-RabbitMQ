@@ -55,7 +55,7 @@ my @chars=('a'..'z','A'..'Z','0'..'9','_');
 my $size;
 
 my $i = 0;
-while($i<10000){
+while($i<1000){
 
     my $random_string = "";
     foreach (1..100) 
@@ -95,7 +95,7 @@ $method->add_input_parameter(
 $dispatcher->register_method($method);
 
 $i=0;
-while($i<10000){
+while($i<1000){
     
     my @chars=('a'..'z','A'..'Z','0'..'9','_');
     my $random_string;
