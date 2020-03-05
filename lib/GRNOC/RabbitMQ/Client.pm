@@ -384,4 +384,7 @@ sub AUTOLOAD{
     }
 }
 
+# Defined to prevent AUTOLOAD from trying to do this
+sub DESTROY { }
+
 1;
