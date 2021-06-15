@@ -354,6 +354,9 @@ sub AUTOLOAD{
             body => encode_json($params)
             );
         
+	# Make sure AnyEvent knows where now is before we make a timer, anything
+	# calling this might have been doing sleeps or other event control
+	AnyEvent->now_update;
         
         $self->pending_responses->{$corr_id}->{'timeout'} = AnyEvent->timer( after => $self->timeout,
                                                                              cb => sub{
