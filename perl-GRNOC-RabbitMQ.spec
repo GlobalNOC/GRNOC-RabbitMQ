@@ -15,7 +15,7 @@ BuildArch:noarch
 
 BuildRequires: perl
 Requires: perl-GRNOC-Log
-Requires: perl(GRNOC::WebService::Regex)
+Requires: perl-GRNOC-WebService
 
 %description
 The GRNOC::RabbitMQ collection is a set of perl modules which are used to
