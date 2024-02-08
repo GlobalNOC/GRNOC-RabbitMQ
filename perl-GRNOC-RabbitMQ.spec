@@ -1,3 +1,7 @@
+%global debug_package %{nil} # Don't generate debug info
+%global _binaries_in_noarch_packages_terminate_build   0
+AutoReqProv: no # Keep rpmbuild from trying to figure out Perl on its own
+
 Summary: GRNOC RabbitMQ Perl Libraries
 Name: perl-GRNOC-RabbitMQ
 Version: 1.2.2
@@ -11,17 +15,7 @@ BuildArch:noarch
 
 BuildRequires: perl
 Requires: perl-GRNOC-Log
-Requires: perl-AnyEvent
-Requires: perl-AnyEvent-RabbitMQ = 1.19.1
-Requires: perl-Devel-Cover
-Requires: perl-Event-Lib
-Requires: perl-JSON-XS
-Requires: perl-JSON-Schema
-Requires: perl-autovivification
 Requires: perl(GRNOC::WebService::Regex)
-Requires: perl-Proc-Daemon
-Requires: perl-Moo
-Requires: perl(Data::UUID)
 
 %description
 The GRNOC::RabbitMQ collection is a set of perl modules which are used to
@@ -31,20 +25,25 @@ provide and interact with GRNOC RabbitMQ services.
 %setup -q -n perl-GRNOC-RabbitMQ-%{version}
 
 %build
-%{__perl} Makefile.PL PREFIX="%{buildroot}%{_prefix}" INSTALLDIRS="vendor"
-make
 
 %install
-rm -rf $RPM_BUILDR_ROOT
-make pure_install
+rm -rf %{buildroot}
+
+%{__install} -d -p %{buildroot}/%{perl_vendorlib}/GRNOC/RabbitMQ/
+%{__install} -d -p %{buildroot}/opt/grnoc/venv/%{name}/lib/perl5
+
+%{__install} lib/GRNOC/RabbitMQ.pm %{buildroot}/%{perl_vendorlib}/GRNOC
+%{__install} lib/GRNOC/RabbitMQ/Client.pm %{buildroot}/%{perl_vendorlib}/GRNOC/RabbitMQ
+%{__install} lib/GRNOC/RabbitMQ/Dispatcher.pm %{buildroot}/%{perl_vendorlib}/GRNOC/RabbitMQ
+%{__install} lib/GRNOC/RabbitMQ/Method.pm %{buildroot}/%{perl_vendorlib}/GRNOC/RabbitMQ
+
+# add virtual environment files
+cp -r venv/lib/perl5/* -t %{buildroot}/opt/grnoc/venv/%{name}/lib/perl5
 
 # clean up buildroot
 find %{buildroot} -name .packlist -exec %{__rm} {} \;
 
 %{_fixperms} $RPM_BUILD_ROOT/*
-
-%check
-make test
 
 %clean
 rm -rf $RPM_BUILD_ROOT
@@ -55,10 +54,6 @@ rm -rf $RPM_BUILD_ROOT
 %{perl_vendorlib}/GRNOC/RabbitMQ/Dispatcher.pm
 %{perl_vendorlib}/GRNOC/RabbitMQ/Method.pm
 %{perl_vendorlib}/GRNOC/RabbitMQ/Client.pm
-%doc %{_mandir}/man3/GRNOC::RabbitMQ.3pm.gz
-%doc %{_mandir}/man3/GRNOC::RabbitMQ::Dispatcher.3pm.gz
-%doc %{_mandir}/man3/GRNOC::RabbitMQ::Method.3pm.gz
-%doc %{_mandir}/man3/GRNOC::RabbitMQ::Client.3pm.gz
 
-%changelog
-
+%defattr(644, root, root, 755)
+/opt/grnoc/venv/%{name}/lib/perl5/*

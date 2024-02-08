@@ -12,16 +12,18 @@
 use strict;
 use warnings;
 
+use lib '/opt/grnoc/venv/perl-GRNOC-RabbitMQ/lib/perl5';
+
 package GRNOC::RabbitMQ::Client;
 
-use AnyEvent;
+use AnyEvent 7.07;
 use GRNOC::RabbitMQ;
-use Data::UUID;
+use Data::UUID 1.219;
 use GRNOC::Log;
-use JSON::XS;
-use Moo;
-use Time::HiRes qw( gettimeofday tv_interval);
-use Data::Dumper;
+use JSON::XS 3.01;
+use Moo 2.003000;
+use Time::HiRes 1.9725 qw( gettimeofday tv_interval);
+use Data::Dumper 2.145;
 
 
 =head1 NAME

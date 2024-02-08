@@ -1,0 +1,14 @@
+requires 'AnyEvent', '7.07';
+requires 'AnyEvent::RabbitMQ', '1.19';
+requires 'Devel::Cover', '1.03';
+requires 'JSON::XS', '3.01';
+requires 'JSON::Schema', '0.016';
+requires 'Proc::Daemon', '0.19';
+requires 'Moo', '2.003000';
+requires 'Data::UUID', '1.219';
+requires 'autovivification', '0.11';
+requires 'Test::Pod', '1.22';
+requires 'Test::Pod::Coverage', '1.08';
+requires 'Storable', '2.45';
+requires 'Time::HiRes', '1.9725';
+requires 'Data::Dumper', '2.145';

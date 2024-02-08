@@ -13,13 +13,15 @@ package GRNOC::RabbitMQ::Method;
 use strict;
 use warnings;
 
-use AnyEvent::RabbitMQ;
-use AnyEvent;
+use lib '/opt/grnoc/venv/perl-GRNOC-RabbitMQ/lib/perl5';
+
+use AnyEvent::RabbitMQ 1.19;
+use AnyEvent 7.07;
 use GRNOC::Log;
-use JSON::XS;
-use JSON::Schema;
+use JSON::XS 3.01;
+use JSON::Schema 0.016;
 use GRNOC::WebService::Regex;
-use Storable qw(dclone);
+use Storable 2.45 qw(dclone);
 
 =head1 NAME
 

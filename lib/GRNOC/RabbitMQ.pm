@@ -49,7 +49,9 @@ You can find documentation for this module with the perldoc command.
 use strict;
 use warnings;
 
-use AnyEvent::RabbitMQ;
+use lib '/opt/grnoc/venv/perl-GRNOC-RabbitMQ/lib/perl5';
+
+use AnyEvent::RabbitMQ 1.19;
 
 our $VERSION = '1.2.2';
 

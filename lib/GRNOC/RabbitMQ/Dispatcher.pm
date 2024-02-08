@@ -12,12 +12,14 @@
 use strict;
 use warnings;
 
+use lib '/opt/grnoc/venv/perl-GRNOC-RabbitMQ/lib/perl5';
+
 package GRNOC::RabbitMQ::Dispatcher;
 
-use AnyEvent;
+use AnyEvent 7.07;
 use GRNOC::Log;
 use GRNOC::RabbitMQ;
-use Moo;
+use Moo 2.003000;
 
 =head1 NAME
 
