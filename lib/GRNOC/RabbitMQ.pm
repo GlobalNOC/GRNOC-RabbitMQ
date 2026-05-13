@@ -60,23 +60,25 @@ our $VERSION = '1.2.2';
 
 =cut
 sub connect_to_rabbit{
-    my %args = ( host => 'localhost',
-		 port => 5672,
-		 user => 'guest',
-		 pass => 'guest',
-		 vhost => '/',
-		 timeout => 10,
-		 on_success => \&GRNOC::RabbitMQ::channel_creator,
-		 on_failure => \&GRNOC::RabbitMQ::on_failure_handler,
-		 on_read_failure => \&GRNOC::RabbitMQ::on_failure_handler,
-		 on_return => \&GRNOC::RabbitMQ::on_failure_handler,
-		 on_close => \&GRNOC::RabbitMQ::on_close_handler,
-		 exchange => undef,
-		 obj => undef,
-		 queue => undef,
-		 exclusive => 0,
-		 type => undef,
-		 @_);
+    my %args = (
+        host => 'localhost',
+        port => 5672,
+        user => 'guest',
+        pass => 'guest',
+        vhost => '/',
+        timeout => 10,
+        on_success => \&GRNOC::RabbitMQ::channel_creator,
+        on_failure => \&GRNOC::RabbitMQ::on_failure_handler,
+        on_read_failure => \&GRNOC::RabbitMQ::on_failure_handler,
+        on_return => \&GRNOC::RabbitMQ::on_failure_handler,
+        on_close => \&GRNOC::RabbitMQ::on_close_handler,
+        exchange => undef,
+        obj => undef,
+        queue => undef,
+        exclusive => 0,
+        type => undef,
+        @_
+    );
 
     my $cv = AnyEvent->condvar;
 
@@ -93,14 +95,12 @@ sub connect_to_rabbit{
         on_read_failure => $args{'on_read_failure'}(cv => $cv, obj => $args{'obj'}),
         on_return  => $args{'on_return'}(cv => $cv, obj => $args{'obj'}),
         on_close   => $args{'on_close'}(obj => $args{'obj'})
-	);
+    );
 
     my $status = $cv->recv();
-    
-    if(!$status){
+    if (!$status) {
         return;
     }
-    
     return $ar;
 }
 
