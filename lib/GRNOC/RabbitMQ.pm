@@ -76,6 +76,7 @@ sub connect_to_rabbit{
         obj => undef,
         queue => undef,
         arguments => {},
+        durable => 0,
         exclusive => 0,
         type => undef,
         @_
@@ -91,7 +92,7 @@ sub connect_to_rabbit{
         vhost => $args{'vhost'},
         timeout => $args{'timeout'},
         tls => 0,
-        on_success => $args{'on_success'}(cv => $cv, obj => $args{'obj'}, queue => $args{'queue'}, arguments => $args{'arguments'}, exclusive => $args{'exclusive'}, type => $args{'type'}, exchange => $args{'exchange'}),
+        on_success => $args{'on_success'}(cv => $cv, obj => $args{'obj'}, queue => $args{'queue'}, arguments => $args{'arguments'}, durable => $args{'durable'}, exclusive => $args{'exclusive'}, type => $args{'type'}, exchange => $args{'exchange'}),
         on_failure => $args{'on_failure'}(cv => $cv, obj => $args{'obj'}),
         on_read_failure => $args{'on_read_failure'}(cv => $cv, obj => $args{'obj'}),
         on_return  => $args{'on_return'}(cv => $cv, obj => $args{'obj'}),
@@ -153,7 +154,7 @@ sub on_client_close_handler{
 sub on_failure_handler{
     my %params = @_;
 
-    return sub{
+    return sub {
         $params{'obj'}->logger->error("Error connecting");
 	$params{'cv'}->send(0);
     };
@@ -221,6 +222,7 @@ sub queue_declare{
 
         $params{'obj'}->channel->declare_queue(
             arguments => $params{'arguments'},
+            durable => $params{'durable'},
             exclusive => $params{'exclusive'},
             queue => $params{'queue'},
             on_success => sub {
@@ -232,8 +234,8 @@ sub queue_declare{
                 $params{'cv'}->send(1);
             },
             on_failure => sub {
-                $params{'obj'}->logger->error("Unable to create RabbitMQ Queue!");
-
+                my $msg = shift;
+                $params{'obj'}->logger->error("Unable to create RabbitMQ Queue! $msg");
                 $params{'cv'}->send(0);
             }
         );

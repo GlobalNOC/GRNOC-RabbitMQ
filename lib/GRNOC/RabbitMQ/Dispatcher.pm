@@ -132,6 +132,8 @@ has prefetch_count => (is => 'rwp', default => 1, required => 1);
 has queue_name => (is => 'rwp', required => 0);
 has topic => (is => 'rwp', required => 1);
 has exclusive => (is => 'rwp', default => 0);
+has arguments => (is => 'rwp', default => sub { return {} });
+has durable => (is => 'rwp', default => 0);
 has exchange => (is => 'rwp', required => 1);
 has auto_reconnect => (is => 'rw', default => 0);
 has on_success => (is => 'rwp', default => sub { return \&GRNOC::RabbitMQ::channel_creator }, required => 1);
@@ -200,6 +202,8 @@ sub _connect_to_rabbit{
         exchange => $self->exchange,
         type => 'topic',
         obj => $self,
+        arguments => $self->arguments,
+        durable => $self->durable,
         exclusive => $self->exclusive,
         queue => $self->queue_name,
         on_success => $self->on_success,
