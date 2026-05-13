@@ -53,7 +53,7 @@ use lib '/opt/grnoc/venv/perl-GRNOC-RabbitMQ/lib/perl5';
 
 use AnyEvent::RabbitMQ 1.19;
 
-our $VERSION = '1.2.2';
+our $VERSION = '1.3.0';
 
 
 =head2 connect_to_rabbit
