@@ -184,11 +184,10 @@ sub exchange_creator{
 
     return sub {
         my $channel = shift;
-
-        $params{'obj'}->logger->info("Successfully created RabbitMQ Channel");
+        $params{'obj'}->logger->info("Successfully created RabbitMQ Channel! Creating Exchange...");
 
         # Apply QoS to the channel to ensure only the desired message rate
-        if (defined $params{'obj'}{'prefetch_count'}){
+        if (defined $params{'obj'}{'prefetch_count'}) {
             $params{'obj'}->logger->info("Applying QoS to channel");
             $channel->qos(
                 prefetch_count => $params{'obj'}{'prefetch_count'},
@@ -215,20 +214,25 @@ sub queue_declare{
     my %params = @_;
     
     return sub {
-        $params{'obj'}->logger->info("Successfully created RabbitMQ Exchange");
-	$params{'obj'}->channel->declare_queue( exclusive => $params{'exclusive'},
-				 queue => $params{'queue'},
-				 on_success => sub {
-				     my $method = shift;
-                                     $params{'obj'}->logger->info("Successfully created Queue!");
-				     $params{'obj'}->_set_queue($method->method_frame->queue);
-				     $params{'obj'}->_set_connected(1);
-                                     $params{'cv'}->send(1);
-				 },
-				 on_failure => sub {
-                                     $params{'obj'}->logger->error("Unable to create Queue");
-				     $params{'cv'}->send(0);
-				 });
+        $params{'obj'}->logger->info("Successfully created RabbitMQ Exchange! Creating Queue...");
+
+        $params{'obj'}->channel->declare_queue(
+            exclusive => $params{'exclusive'},
+            queue => $params{'queue'},
+            on_success => sub {
+                my $method = shift;
+                $params{'obj'}->logger->info("Successfully created RabbitMQ Queue!");
+
+                $params{'obj'}->_set_queue($method->method_frame->queue);
+                $params{'obj'}->_set_connected(1);
+                $params{'cv'}->send(1);
+            },
+            on_failure => sub {
+                $params{'obj'}->logger->error("Unable to create RabbitMQ Queue!");
+
+                $params{'cv'}->send(0);
+            }
+        );
     };
 }
 
