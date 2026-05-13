@@ -75,6 +75,7 @@ sub connect_to_rabbit{
         exchange => undef,
         obj => undef,
         queue => undef,
+        arguments => {},
         exclusive => 0,
         type => undef,
         @_
@@ -90,7 +91,7 @@ sub connect_to_rabbit{
         vhost => $args{'vhost'},
         timeout => $args{'timeout'},
         tls => 0,
-        on_success => $args{'on_success'}(cv => $cv, obj => $args{'obj'}, queue => $args{'queue'}, exclusive => $args{'exclusive'}, type => $args{'type'}, exchange => $args{'exchange'}),
+        on_success => $args{'on_success'}(cv => $cv, obj => $args{'obj'}, queue => $args{'queue'}, arguments => $args{'arguments'}, exclusive => $args{'exclusive'}, type => $args{'type'}, exchange => $args{'exchange'}),
         on_failure => $args{'on_failure'}(cv => $cv, obj => $args{'obj'}),
         on_read_failure => $args{'on_read_failure'}(cv => $cv, obj => $args{'obj'}),
         on_return  => $args{'on_return'}(cv => $cv, obj => $args{'obj'}),
@@ -219,6 +220,7 @@ sub queue_declare{
         $params{'obj'}->logger->info("Successfully created RabbitMQ Exchange! Creating Queue...");
 
         $params{'obj'}->channel->declare_queue(
+            arguments => $params{'arguments'},
             exclusive => $params{'exclusive'},
             queue => $params{'queue'},
             on_success => sub {
