@@ -168,10 +168,12 @@ sub channel_creator{
     
     return sub{
         my $r = shift;
-        $params{'obj'}->logger->info("Successfully connected to RabbitMQ");
-        $r->open_channel( on_success => GRNOC::RabbitMQ::exchange_creator( %params ),
-			  on_failure => GRNOC::RabbitMQ::on_failure_handler( %params ),
-			  on_close   => GRNOC::RabbitMQ::on_close_handler( %params) );
+        $params{'obj'}->logger->info("Successfully connected to RabbitMQ! Creating Channel...");
+        $r->open_channel(
+            on_success => GRNOC::RabbitMQ::exchange_creator( %params ),
+            on_failure => GRNOC::RabbitMQ::on_failure_handler( %params ),
+            on_close   => GRNOC::RabbitMQ::on_close_handler( %params)
+        );
     };
 }
 
