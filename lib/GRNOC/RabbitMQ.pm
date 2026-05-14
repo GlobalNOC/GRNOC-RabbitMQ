@@ -53,30 +53,34 @@ use lib '/opt/grnoc/venv/perl-GRNOC-RabbitMQ/lib/perl5';
 
 use AnyEvent::RabbitMQ 1.19;
 
-our $VERSION = '1.2.2';
+our $VERSION = '1.3.0';
 
 
 =head2 connect_to_rabbit
 
 =cut
 sub connect_to_rabbit{
-    my %args = ( host => 'localhost',
-		 port => 5672,
-		 user => 'guest',
-		 pass => 'guest',
-		 vhost => '/',
-		 timeout => 10,
-		 on_success => \&GRNOC::RabbitMQ::channel_creator,
-		 on_failure => \&GRNOC::RabbitMQ::on_failure_handler,
-		 on_read_failure => \&GRNOC::RabbitMQ::on_failure_handler,
-		 on_return => \&GRNOC::RabbitMQ::on_failure_handler,
-		 on_close => \&GRNOC::RabbitMQ::on_close_handler,
-		 exchange => undef,
-		 obj => undef,
-		 queue => undef,
-		 exclusive => 0,
-		 type => undef,
-		 @_);
+    my %args = (
+        host => 'localhost',
+        port => 5672,
+        user => 'guest',
+        pass => 'guest',
+        vhost => '/',
+        timeout => 10,
+        on_success => \&GRNOC::RabbitMQ::channel_creator,
+        on_failure => \&GRNOC::RabbitMQ::on_failure_handler,
+        on_read_failure => \&GRNOC::RabbitMQ::on_failure_handler,
+        on_return => \&GRNOC::RabbitMQ::on_failure_handler,
+        on_close => \&GRNOC::RabbitMQ::on_close_handler,
+        exchange => undef,
+        obj => undef,
+        queue => undef,
+        arguments => {},
+        durable => 0,
+        exclusive => 0,
+        type => undef,
+        @_
+    );
 
     my $cv = AnyEvent->condvar;
 
@@ -88,19 +92,17 @@ sub connect_to_rabbit{
         vhost => $args{'vhost'},
         timeout => $args{'timeout'},
         tls => 0,
-        on_success => $args{'on_success'}(cv => $cv, obj => $args{'obj'}, queue => $args{'queue'}, exclusive => $args{'exclusive'}, type => $args{'type'}, exchange => $args{'exchange'}),
+        on_success => $args{'on_success'}(cv => $cv, obj => $args{'obj'}, queue => $args{'queue'}, arguments => $args{'arguments'}, durable => $args{'durable'}, exclusive => $args{'exclusive'}, type => $args{'type'}, exchange => $args{'exchange'}),
         on_failure => $args{'on_failure'}(cv => $cv, obj => $args{'obj'}),
         on_read_failure => $args{'on_read_failure'}(cv => $cv, obj => $args{'obj'}),
         on_return  => $args{'on_return'}(cv => $cv, obj => $args{'obj'}),
         on_close   => $args{'on_close'}(obj => $args{'obj'})
-	);
+    );
 
     my $status = $cv->recv();
-    
-    if(!$status){
+    if (!$status) {
         return;
     }
-    
     return $ar;
 }
 
@@ -152,7 +154,7 @@ sub on_client_close_handler{
 sub on_failure_handler{
     my %params = @_;
 
-    return sub{
+    return sub {
         $params{'obj'}->logger->error("Error connecting");
 	$params{'cv'}->send(0);
     };
@@ -168,10 +170,12 @@ sub channel_creator{
     
     return sub{
         my $r = shift;
-        $params{'obj'}->logger->info("Successfully connected to RabbitMQ");
-        $r->open_channel( on_success => GRNOC::RabbitMQ::exchange_creator( %params ),
-			  on_failure => GRNOC::RabbitMQ::on_failure_handler( %params ),
-			  on_close   => GRNOC::RabbitMQ::on_close_handler( %params) );
+        $params{'obj'}->logger->info("Successfully connected to RabbitMQ! Creating Channel...");
+        $r->open_channel(
+            on_success => GRNOC::RabbitMQ::exchange_creator( %params ),
+            on_failure => GRNOC::RabbitMQ::on_failure_handler( %params ),
+            on_close   => GRNOC::RabbitMQ::on_close_handler( %params)
+        );
     };
 }
 
@@ -183,23 +187,26 @@ sub exchange_creator{
     my %params = @_;
 
     return sub {
-	my $channel = shift;
+        my $channel = shift;
+        $params{'obj'}->logger->info("Successfully created RabbitMQ Channel! Creating Exchange...");
 
-        $params{'obj'}->logger->info("Successfully created RabbitMQ Channel");
-
-        # apply QoS to the channel to ensure only the desired message rate
-	if (defined $params{'obj'}{'prefetch_count'}){
-	    $params{'obj'}->logger->info("Applying QoS to channel");
-	    $channel->qos(prefetch_count => $params{'obj'}{'prefetch_count'},
-			  on_success     => sub { $params{'obj'}->logger->info("QoS applied successfully"); },
-			  on_failure     => GRNOC::RabbitMQ::on_failure_handler( %params ));
-	}
+        # Apply QoS to the channel to ensure only the desired message rate
+        if (defined $params{'obj'}{'prefetch_count'}) {
+            $params{'obj'}->logger->info("Applying QoS to channel");
+            $channel->qos(
+                prefetch_count => $params{'obj'}{'prefetch_count'},
+                on_success => sub { $params{'obj'}->logger->info("QoS applied successfully"); },
+                on_failure => GRNOC::RabbitMQ::on_failure_handler( %params )
+            );
+        }
 
         $params{'obj'}->_set_channel($channel);
-	$channel->declare_exchange( exchange => $params{'exchange'},
-				    type => $params{'type'},
-				    on_success => GRNOC::RabbitMQ::queue_declare( %params ),
-				    on_failure => GRNOC::RabbitMQ::on_failure_handler( %params ) );
+        $channel->declare_exchange(
+            exchange => $params{'exchange'},
+            type => $params{'type'},
+            on_success => GRNOC::RabbitMQ::queue_declare( %params ),
+            on_failure => GRNOC::RabbitMQ::on_failure_handler( %params )
+        );
     };
 }
 
@@ -211,20 +218,27 @@ sub queue_declare{
     my %params = @_;
     
     return sub {
-        $params{'obj'}->logger->info("Successfully created RabbitMQ Exchange");
-	$params{'obj'}->channel->declare_queue( exclusive => $params{'exclusive'},
-				 queue => $params{'queue'},
-				 on_success => sub {
-				     my $method = shift;
-                                     $params{'obj'}->logger->info("Successfully created Queue!");
-				     $params{'obj'}->_set_queue($method->method_frame->queue);
-				     $params{'obj'}->_set_connected(1);
-                                     $params{'cv'}->send(1);
-				 },
-				 on_failure => sub {
-                                     $params{'obj'}->logger->error("Unable to create Queue");
-				     $params{'cv'}->send(0);
-				 });
+        $params{'obj'}->logger->info("Successfully created RabbitMQ Exchange! Creating Queue...");
+
+        $params{'obj'}->channel->declare_queue(
+            arguments => $params{'arguments'},
+            durable => $params{'durable'},
+            exclusive => $params{'exclusive'},
+            queue => $params{'queue'},
+            on_success => sub {
+                my $method = shift;
+                $params{'obj'}->logger->info("Successfully created RabbitMQ Queue!");
+
+                $params{'obj'}->_set_queue($method->method_frame->queue);
+                $params{'obj'}->_set_connected(1);
+                $params{'cv'}->send(1);
+            },
+            on_failure => sub {
+                my $msg = shift;
+                $params{'obj'}->logger->error("Unable to create RabbitMQ Queue! $msg");
+                $params{'cv'}->send(0);
+            }
+        );
     };
 }
 
