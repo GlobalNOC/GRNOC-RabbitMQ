@@ -86,6 +86,7 @@ main();
 =item timeout
 =item prefetch_count
 =item queue_name
+=item arguments
 =item topic
 =item topic
 =item exchange
@@ -117,6 +118,7 @@ has vhost => (is => 'rwp', default => '/', required => 1);
 has timeout => (is => 'rwp', default => 15, required => 1);
 has prefetch_count => (is => 'rwp', default => 1, required => 1);
 has queue_name => (is => 'rwp');
+has arguments => (is => 'rwp', default => sub { return { 'x-expires' => 300_000 } });
 has topic => (is => 'rw', required => 1);
 has exchange => (is => 'rwp', required => 1);
 has auto_reconnect => (is => 'rw', default => 0);
@@ -166,6 +168,7 @@ sub _connect{
         obj => $self,
         exclusive => 1,
         queue => $self->queue_name,
+        arguments => $self->arguments,
         on_success => $self->on_success,
         on_failure => $self->on_failure,
         on_read_failure => $self->on_read_failure,
@@ -209,6 +212,8 @@ sub _connect{
 
     return 1;
 }
+
+
 
 
 =head2 stop_consuming

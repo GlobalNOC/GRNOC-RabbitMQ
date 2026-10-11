@@ -53,7 +53,7 @@ use lib '/opt/grnoc/venv/perl-GRNOC-RabbitMQ/lib/perl5';
 
 use AnyEvent::RabbitMQ 1.19;
 
-our $VERSION = '1.3.0';
+our $VERSION = '1.3.1';
 
 
 =head2 connect_to_rabbit
@@ -116,7 +116,38 @@ sub on_read_failure{
 }
 
 
+=head2 _close_reason_text
+
+Defensively formats whatever AnyEvent::RabbitMQ hands an on_close callback --
+either a Net::AMQP::Protocol::*::Close frame (server-initiated close, with a
+reply_code/reply_text) or a plain string (local/network failure) -- into a
+loggable string.
+
+=cut
+
+sub _close_reason_text{
+    my $reason = shift;
+
+    return 'unknown reason' if !defined($reason);
+
+    if (ref($reason) && $reason->can('method_frame') && defined($reason->method_frame)) {
+        my $method_frame = $reason->method_frame;
+        my $code = defined($method_frame->reply_code) ? $method_frame->reply_code : '?';
+        my $text = defined($method_frame->reply_text) ? $method_frame->reply_text : '';
+        return "$code $text";
+    }
+
+    return "$reason";
+}
+
 =head2 on_close_handler
+
+Handles the *channel* level on_close. A broker can close just the channel
+(e.g. a protocol exception, or the queue's home node going away) while the
+underlying connection survives. That used to leave 'connected' set to true
+forever, so nothing (Client::AUTOLOAD's auto_reconnect check, or an
+application's own watchdog polling ->connected) ever noticed the channel was
+dead. Treat a channel close the same as a connection close for that purpose.
 
 =cut
 
@@ -124,11 +155,13 @@ sub on_close_handler{
     my %params = @_;
 
     return sub {
+        my $close_reason = shift;
         my $obj = $params{'obj'};
-        $obj->logger->error("Connection to RabbitMQ Closed");
+        $obj->logger->error("RabbitMQ channel closed: " . _close_reason_text($close_reason));
         if($obj->consuming){
             $obj->stop_consuming();
         }
+        $obj->_set_connected(0);
     };
 
 }
@@ -140,8 +173,12 @@ sub on_client_close_handler{
     my %params = @_;
 
     return sub {
+        my $close_reason = shift;
         my $obj = $params{'obj'};
-        $obj->logger->error("Connection to RabbitMQ Closed");
+        $obj->logger->error("Connection to RabbitMQ Closed: " . _close_reason_text($close_reason));
+        if($obj->consuming){
+            $obj->stop_consuming();
+        }
         $obj->_set_connected(0);
     };
 
