@@ -188,7 +188,7 @@ sub BUILD{
 =cut
 sub _connect_to_rabbit{
     my $self = shift;
-    $self->logger->debug("Connecting to RabbitMQ.");
+    $self->logger->debug("Connecting to RabbitMQ.") if $self->logger->is_debug;
 
     my $ar = GRNOC::RabbitMQ::connect_to_rabbit(
         host => $self->host,
@@ -321,10 +321,10 @@ sub handle_request{
 
     if(defined($var->{'header'}->{'no_reply'}) && $var->{'header'}->{'no_reply'} == 1){
 
-	$self->logger->debug("No Reply specified");
+	$self->logger->debug("No Reply specified") if $self->logger->is_debug;
 	
     }else{
-	$self->logger->debug("Has reply specified");
+	$self->logger->debug("Has reply specified") if $self->logger->is_debug;
 	$reply_to->{'exchange'} = $var->{'deliver'}->{'method_frame'}->{'exchange'};
 	$reply_to->{'correlation_id'} = $var->{'header'}->{'correlation_id'},
 	$reply_to->{'routing_key'} = $var->{'header'}->{'reply_to'};
@@ -463,7 +463,7 @@ sub register_method{
 
     my $cv = AnyEvent->condvar;
 
-    $self->logger->debug("Binding $method_name to queue");
+    $self->logger->debug("Binding $method_name to queue") if $self->logger->is_debug;
 
     $self->channel->bind_queue( queue => $self->queue,
                                 exchange => $self->exchange,

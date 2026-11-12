@@ -267,7 +267,7 @@ sub _validate_schema{
     my $res = $self->{'validator'}->validate($json);
 
     if($res){
-	$self->{'logger'}->debug("JSON Validated!");
+	$self->{'logger'}->debug("JSON Validated!") if $self->logger->is_debug;
 	return 1;
     }else{
         

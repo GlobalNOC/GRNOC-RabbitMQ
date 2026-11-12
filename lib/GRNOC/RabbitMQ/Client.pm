@@ -150,7 +150,7 @@ sub BUILD{
 sub _connect{
     my $self = shift;
     
-    $self->logger->debug("Connecting to RabbitMQ");
+    $self->logger->debug("Connecting to RabbitMQ") if $self->logger->is_debug;
 
     my $ar = GRNOC::RabbitMQ::connect_to_rabbit(
         host => $self->host,
@@ -185,7 +185,7 @@ sub _connect{
         return;
     }
 
-    $self->logger->debug("Connected to Rabbit");
+    $self->logger->debug("Connected to Rabbit") if $self->logger->is_debug;
 
     my $cv = AnyEvent->condvar;
 
@@ -238,13 +238,13 @@ sub on_response_cb {
         
         my $end = [gettimeofday];
         
-        $self->logger->debug("on_response_cb callback args: " . Data::Dumper::Dumper($var));
-        $self->logger->debug("Pending Responses: " . Data::Dumper::Dumper($self->pending_responses));
+        $self->logger->debug("on_response_cb callback args: " . Data::Dumper::Dumper($var)) if $self->logger->is_debug;
+        $self->logger->debug("Pending Responses: " . Data::Dumper::Dumper($self->pending_responses)) if $self->logger->is_debug;
         
         my $corr_id = $var->{header}->{correlation_id};
         if (defined $self->{'pending_responses'}->{$corr_id}) {
-            $self->logger->debug("on_response_db callback result: " . $body);
-            $self->logger->debug("total time: " . tv_interval( $self->pending_responses->{$corr_id}->{'start'}, $end));
+            $self->logger->debug("on_response_db callback result: " . $body) if $self->logger->is_debug;
+            $self->logger->debug("total time: " . tv_interval( $self->pending_responses->{$corr_id}->{'start'}, $end)) if $self->logger->is_debug;
 
             my $cb = $self->pending_responses->{$corr_id}{'cb'};
 
@@ -270,7 +270,7 @@ sub on_response_cb {
             #we update the now_update to update it
             AnyEvent->now_update;
         } else {
-            $self->logger->debug("I don't know what to do with corr_id: $corr_id");
+            $self->logger->debug("I don't know what to do with corr_id: $corr_id") if $self->logger->is_debug;
         }
 
         $self->channel->ack();
@@ -285,13 +285,13 @@ sub AUTOLOAD{
     # Don't need to do anything for the destructor
     return if ($name =~ /DESTROY$/);
 
-    $self->logger->debug("Calling: " . $name);
+    $self->logger->debug("Calling: " . $name) if $self->logger->is_debug;
 
     if(!$self->connected){
-        $self->logger->debug("Not connected to rabbit.");
+        $self->logger->debug("Not connected to rabbit.") if $self->logger->is_debug;
 
         if($self->auto_reconnect()){
-            $self->logger->debug("Attempting to reconnect to Rabbit.");
+            $self->logger->debug("Attempting to reconnect to Rabbit.") if $self->logger->is_debug;
 
             #--- try to reconnect, error out if we can't
             my $res = $self->_connect();
@@ -301,7 +301,7 @@ sub AUTOLOAD{
             }
         }
         else{
-            $self->logger->debug('Auto Reconnect disabled. Returning.');
+            $self->logger->debug('Auto Reconnect disabled. Returning.') if $self->logger->is_debug;
             return;
         }
     }
@@ -309,13 +309,13 @@ sub AUTOLOAD{
     
     my @stuff = split('::', $name);
     $name = pop(@stuff);
-    $self->logger->debug("Running name: " . $name . "\n");
-    $self->logger->debug("Params: " . Data::Dumper::Dumper(@_));
+    $self->logger->debug("Running name: " . $name . "\n") if $self->logger->is_debug;
+    $self->logger->debug("Params: " . Data::Dumper::Dumper(@_)) if $self->logger->is_debug;
     my $params = {
         @_
     };
     
-    $self->logger->debug("Topic: " . $self->topic . "." . $name);
+    $self->logger->debug("Topic: " . $self->topic . "." . $name) if $self->logger->is_debug;
 
     if(defined($params->{'no_reply'}) && $params->{'no_reply'} == 1){
         delete $params->{'no_reply'};
@@ -344,7 +344,7 @@ sub AUTOLOAD{
         $self->pending_responses->{$corr_id}{'cb'} = $callback;
         $self->pending_responses->{$corr_id}{'start'} = [gettimeofday];
         
-        $self->logger->debug("Correlation ID: " . $corr_id);
+        $self->logger->debug("Correlation ID: " . $corr_id) if $self->logger->is_debug;
         
         $self->channel->publish(
             exchange => $self->exchange,
@@ -385,7 +385,7 @@ sub AUTOLOAD{
             return $res;
         }
         
-        $self->logger->debug("Moving on...")
+        $self->logger->debug("Moving on...") if $self->logger->is_debug;
     }
 }
 
